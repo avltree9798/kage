@@ -113,7 +113,8 @@ public final class AppEnvironment {
         if uiTestTabCount > 0, let url = uiTestURL {
             for i in 0..<uiTestTabCount {
                 var c = URLComponents(url: url, resolvingAgainstBaseURL: false)
-                c?.queryItems = (c?.queryItems ?? []) + [URLQueryItem(name: "kage-tab", value: String(i))]
+                let items = c?.queryItems ?? []
+                c?.queryItems = items + [URLQueryItem(name: "kage-tab", value: String(i))]
                 currentStore.open(c?.url ?? url)
             }
         }
