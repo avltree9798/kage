@@ -17,6 +17,7 @@ final class AccessibilityAuditTests: XCTestCase {
     private func audit() throws {
         try app.performAccessibilityAudit { issue in
             print("KAGE-AUDIT \(issue.auditType) \(issue.compactDescription) element=\(issue.element.map { "\($0.elementType.rawValue) id=\($0.identifier) label=\($0.label) frame=\($0.frame)" } ?? "nil")")
+            if let e = issue.element { print("KAGE-AUDIT-TREE \(String(e.debugDescription.prefix(3000)))") }
             return issue.element?.elementType == .webView  // the (empty) web view container itself
         }
     }
