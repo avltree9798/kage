@@ -6,7 +6,8 @@ import XCTest
 final class TabMemoryTests: XCTestCase {
     func testHundredTabsStayWithinMemoryBudget() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-KageUITesting", "-KageUITestTabs", "100"]
+        app.launchArguments = ["-KageUITesting"]
+        app.launchEnvironment["KAGE_UITEST_TABS"] = "100"
         app.launch()
         let omnibox = app.textFields["omnibox"]
         let up = omnibox.waitForExistence(timeout: 60)
@@ -18,7 +19,9 @@ final class TabMemoryTests: XCTestCase {
         }
         XCTAssertTrue(up, "Kage should show its window with 100 tabs open")
         let tabs = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Tabs, '")).firstMatch
-        if tabs.exists { print("KAGE-TABS \(tabs.label)") }
+        XCTAssertTrue(tabs.waitForExistence(timeout: 10))
+        print("KAGE-TABS \(tabs.label)")
+        XCTAssertTrue(tabs.label.contains("101"), "100 test tabs plus the home tab")
 
         let options = XCTMeasureOptions()
         options.iterationCount = 3
@@ -29,5 +32,9 @@ final class TabMemoryTests: XCTestCase {
             #endif
             Thread.sleep(forTimeInterval: 5)
         }
+        // Spec 15 budget: well under 1.5 GB for 100 tabs. Checked from the metric log in CI; asserted here
+        // only that the app is still alive and responsive after the switches.
+        XCTAssertEqual(app.state, .runningForeground)
+        XCTAssertTrue(omnibox.exists)
     }
 }

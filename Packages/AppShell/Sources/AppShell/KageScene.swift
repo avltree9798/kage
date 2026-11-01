@@ -7,7 +7,7 @@ import SecurityKit
 
 extension AppEnvironment {
     /// `-KageUITesting` (UI tests only) starts with onboarding done, a throwaway settings suite, an in-memory
-    /// database and no Keychain access, so tests never touch the user's real data. `-KageUITestTabs N` opens N
+    /// database and no Keychain access, so tests never touch the user's real data. `KAGE_UITEST_TABS=N` (environment) opens N
     /// tabs of `KAGE_UITEST_URL` (default https://example.com/) for the 100-tab memory test.
     static func forLaunch(_ process: ProcessInfo = .processInfo) -> AppEnvironment {
         guard process.arguments.contains("-KageUITesting") else { return AppEnvironment() }
@@ -18,8 +18,9 @@ extension AppEnvironment {
         settings.onboardingComplete = true
         settings.homepage = "about:blank"
         let env = AppEnvironment(settings: settings, database: try? KageDatabase.inMemory(), credentials: InMemoryCredentialStore())
-        if let i = process.arguments.firstIndex(of: "-KageUITestTabs"), i + 1 < process.arguments.count,
-           let n = Int(process.arguments[i + 1]) {
+        // An environment variable, not an argument: a bare "100" in argv reads as a file to open on macOS,
+        // and SwiftUI then skips the default window.
+        if let n = process.environment["KAGE_UITEST_TABS"].flatMap(Int.init) {
             env.uiTestTabCount = min(n, 200)
             env.uiTestURL = process.environment["KAGE_UITEST_URL"].flatMap(URL.init(string:)) ?? URL(string: "https://example.com/")!
         }

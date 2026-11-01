@@ -23,6 +23,9 @@ final class AccessibilityAuditTests: XCTestCase {
             // Kage's content group inside it is labelled "Kage". Only that system group is excused.
             if let e = issue.element, e.elementType == .group, e.label.isEmpty,
                e.frame == windowFrame, e.groups["Kage"].exists { return true }
+            // SwiftUI's macOS Menu exposes "show menu" rather than a press action, which the audit reports as
+            // "Action is missing" even though VoiceOver opens it normally.
+            if issue.auditType == .action, issue.element?.elementType == .menuButton { return true }
             return issue.element?.elementType == .webView  // the (empty) web view container itself
         }
     }
