@@ -14,6 +14,7 @@ let package = Package(
         .package(path: "../SecurityKit"),
         .package(path: "../PlatformAdapters"),
         .package(path: "../DesignSystem"),
+        .package(path: "../NetworkTunnel"),
     ],
     targets: [
         .target(
@@ -27,11 +28,13 @@ let package = Package(
                 .product(name: "SecurityKit", package: "SecurityKit"),
                 .product(name: "PlatformAdapters", package: "PlatformAdapters"),
                 .product(name: "DesignSystem", package: "DesignSystem"),
+                .product(name: "NetworkTunnel", package: "NetworkTunnel"),
             ]
         ),
         .testTarget(
             name: "AppShellTests",
-            dependencies: ["AppShell", .product(name: "PrivacyKit", package: "PrivacyKit"), .product(name: "KageModels", package: "KageModels")]
+            dependencies: ["AppShell", .product(name: "PrivacyKit", package: "PrivacyKit"), .product(name: "KageModels", package: "KageModels"),
+                           .product(name: "NetworkTunnel", package: "NetworkTunnel")]
         ),
     ]
 )

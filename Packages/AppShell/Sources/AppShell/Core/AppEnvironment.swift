@@ -9,6 +9,7 @@ import PrivacyKit
 import BrowserCore
 import ContextAI
 import PlatformAdapters
+import NetworkTunnel
 
 /// Composition root: builds every service once and wires them together.
 @MainActor @Observable
@@ -25,7 +26,7 @@ public final class AppEnvironment {
     public let credentials: CredentialStoring
     public let context: ContextCoordinator
     public let lock: SessionLockCoordinator
-    public let network = NetworkProtectionMonitor()
+    public let network = NetworkProtectionMonitor(manager: AppEnvironment.defaultTunnelManager())
     public let capabilities: DeviceCapabilityProviding
     public let retention: HistoryRetentionActor
     public let cleaner: WebsiteDataCleanupService
@@ -87,7 +88,19 @@ public final class AppEnvironment {
 
     // MARK: Startup
 
+    /// Kage's WireGuard tunnel exists only in the app bundle that embeds the extension (not in tests).
+    nonisolated static func defaultTunnelManager() -> (any TunnelManaging)? {
+        #if canImport(NetworkExtension)
+        let plugins = Bundle.main.builtInPlugInsURL?.appendingPathComponent("KageTunnel.appex")
+        guard let plugins, FileManager.default.fileExists(atPath: plugins.path) else { return nil }
+        return SystemTunnelManager.forMainBundle()
+        #else
+        return nil
+        #endif
+    }
+
     public func start() async {
+        await network.start()
         try? await contentBlocking.update(mode: settings.blockingMode, exceptions: Set(settings.blockingExceptions))
         await refreshProtectedSites()
         await applyRetentionOverride()

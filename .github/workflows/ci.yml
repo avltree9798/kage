@@ -40,7 +40,14 @@ jobs:
           xcodebuild -version
           xcodebuild -showsdks | grep -E "iOS|macOS"
       - name: Generate Xcode project
-        run: brew install xcodegen && xcodegen generate
+        # Go builds wireguard-go for the tunnel extension (WireGuardKit's Makefile).
+        run: |
+          brew install xcodegen
+          command -v go || brew install go
+          go version
+          xcodegen generate
+      - name: Resolve packages
+        run: xcodebuild -resolvePackageDependencies -project Kage.xcodeproj
       - name: Build iOS app (simulator, unsigned)
         run: xcodebuild build -project Kage.xcodeproj -scheme KageiOS -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO -quiet
       - name: Build macOS app (unsigned)
@@ -72,3 +79,23 @@ jobs:
           echo "::group::UIKit headers"
           grep -rnE -A6 "UIHinge|ReservedRegion|UIArrangement" "$sdk/System/Library/Frameworks/UIKit.framework/Headers" | head -600 || true
           echo "::endgroup::"
+
+  tracker-rules:
+    # Rebuilds the bundled EasyPrivacy host list and reports whether the checked-in copy is stale.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download EasyPrivacy and convert
+        run: |
+          curl -fsSL https://easylist.to/easylist/easyprivacy.txt -o /tmp/easyprivacy.txt
+          python3 scripts/build-tracker-rules.py /tmp/easyprivacy.txt /tmp/easyprivacy-hosts.txt
+          current=Packages/SecurityKit/Sources/SecurityKit/Resources/easyprivacy-hosts.txt
+          if [ -f "$current" ]; then
+            added=$(comm -13 <(grep -v '^!' "$current" | sort) <(grep -v '^!' /tmp/easyprivacy-hosts.txt | sort) | wc -l)
+            removed=$(comm -23 <(grep -v '^!' "$current" | sort) <(grep -v '^!' /tmp/easyprivacy-hosts.txt | sort) | wc -l)
+            echo "::notice::EasyPrivacy upstream differs from the bundled list by +$added / -$removed hosts"
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: easyprivacy-hosts
+          path: /tmp/easyprivacy-hosts.txt

@@ -1,5 +1,7 @@
 #if canImport(WebKit)
 import SwiftUI
+import UniformTypeIdentifiers
+import NetworkTunnel
 import KageModels
 import PrivacyKit
 import SecurityKit
@@ -167,16 +169,55 @@ struct NetworkProtectionView: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.openURL) private var openURL
     @State private var checking = false
+    @State private var working = false
+    @State private var pasted = ""
+    @State private var importing = false
 
     var body: some View {
         @Bindable var network = env.network
         Form {
             Section {
                 Label(network.state.title, systemImage: network.state.symbol).font(.headline)
-                Text("Kage doesn't include a VPN and can't confirm whether Cloudflare WARP is protecting this device, so it doesn't claim you're protected.")
-                    .font(.footnote).foregroundStyle(.secondary)
+                Text(explanation(network.state)).font(.footnote).foregroundStyle(.secondary)
             }
-            Section("Cloudflare WARP") {
+            if network.hasTunnelSupport {
+                Section {
+                    if network.tunnelInstalled {
+                        let on = network.tunnel == .connected || network.tunnel == .connecting || network.tunnel == .reasserting
+                        Button(on ? "Disconnect" : "Connect") {
+                            Task { working = true; if on { await network.disconnect() } else { await network.connect() }; working = false }
+                        }
+                        .disabled(working)
+                        Button(checking ? "Checking…" : "Check with Cloudflare") {
+                            checking = true
+                            Task { await network.verify(); checking = false }
+                        }
+                        .disabled(checking || network.tunnel != .connected)
+                        Button("Remove Tunnel", role: .destructive) { Task { await network.removeTunnel() } }
+                    } else {
+                        TextField("Paste a WireGuard config", text: $pasted, axis: .vertical)
+                            .lineLimit(4...10).font(.caption.monospaced()).autocorrectionDisabled()
+                            #if os(iOS)
+                            .textInputAutocapitalization(.never)
+                            #endif
+                        Button(working ? "Installing…" : "Install Tunnel") {
+                            Task {
+                                working = true
+                                if await network.importConfig(pasted) { pasted = "" }
+                                working = false
+                            }
+                        }
+                        .disabled(working || pasted.isEmpty)
+                        Button("Import .conf File…") { importing = true }
+                    }
+                    if let error = network.lastError { Text(error).font(.footnote).foregroundStyle(.red) }
+                } header: {
+                    Text("Kage Tunnel (WireGuard)")
+                } footer: {
+                    Text("Use a WireGuard config for Cloudflare WARP or another provider. The private key stays in this device's Keychain. The tunnel is a system VPN, so it carries all of this device's traffic while it's on. Kage says \"Protected by WARP\" only when the tunnel is up and Cloudflare confirms the traffic arrives through WARP.")
+                }
+            }
+            Section("Cloudflare WARP app") {
                 Toggle("I use the Cloudflare WARP app", isOn: $network.userSaysWARPInstalled)
                 Button("Get the 1.1.1.1 + WARP app") {
                     #if os(iOS)
@@ -184,6 +225,40 @@ struct NetworkProtectionView: View {
                     #else
                     openURL(NetworkProtectionMonitor.warpDownloadURL)
                     #endif
+                }
+                if !network.tunnelInstalled {
+                    Button(checking ? "Checking…" : "Ask Cloudflare what it sees") {
+                        checking = true
+                        Task { await network.checkTrace(); checking = false }
+                    }
+                    .disabled(checking)
+                }
+                if let note = network.traceNote { Text(note).font(.footnote) }
+            }
+        }
+        .navigationTitle("Network Protection")
+        .fileImporter(isPresented: $importing, allowedContentTypes: [.data, .plainText]) { result in
+            guard case .success(let url) = result else { return }
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            guard let data = try? Data(contentsOf: url), data.count < 64_000, let text = String(data: data, encoding: .utf8) else { return }
+            Task { working = true; _ = await network.importConfig(text, name: url.deletingPathExtension().lastPathComponent); working = false }
+        }
+    }
+
+    private func explanation(_ state: NetworkProtectionState) -> String {
+        switch state {
+        case .verifiedConnected: "Kage's tunnel is connected and Cloudflare confirms this traffic arrives through WARP."
+        case .tunnelWithoutWARP(let ip): "Kage's tunnel is connected, but Cloudflare doesn't see WARP\(ip.map { " (exit address \($0))" } ?? ""). Your traffic is encrypted to your tunnel provider."
+        case .connecting: "Connecting the tunnel…"
+        case .disconnected: "The tunnel is installed but off."
+        case .restricted: "Turn the Kage VPN profile back on in Settings, or remove and install it again."
+        case .statusUnknown(let detail): detail ?? "Kage can't confirm whether Cloudflare WARP is protecting this device, so it doesn't claim you're protected."
+        case .notConfigured: "Network Protection is off. Install a WireGuard tunnel below or use Cloudflare's WARP app."
+        }
+    }
+}
+#endif
                 }
                 Button(checking ? "Checking…" : "Ask Cloudflare what it sees") {
                     checking = true

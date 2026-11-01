@@ -16,5 +16,23 @@
 	<true/>
 	<key>com.apple.security.personal-information.location</key>
 	<true/>
+	<!-- Kage's WireGuard tunnel (ADR-008 rev. 2): configure the packet-tunnel profile and share its config item with the extension. -->
+	<key>com.apple.developer.networking.networkextension</key>
+	<array>
+		<string>packet-tunnel-provider</string>
+	</array>
+	<key>keychain-access-groups</key>
+	<array>
+		<string>$(AppIdentifierPrefix)dev.kage.shared</string>
+	</array>
+	<!-- Optional bookmark sync (spec 10). The container must exist in the developer account (Docs/Release/Checklist.md). -->
+	<key>com.apple.developer.icloud-container-identifiers</key>
+	<array>
+		<string>iCloud.dev.kage</string>
+	</array>
+	<key>com.apple.developer.icloud-services</key>
+	<array>
+		<string>CloudKit</string>
+	</array>
 </dict>
 </plist>

@@ -34,7 +34,9 @@ public struct CloudKitBookmarkSync: CloudSyncing {
 
     /// Reads the container ID from Info.plist (`KageCloudKitContainer`). Nil means sync isn't set up in this build.
     public static func fromBundle(_ bundle: Bundle = .main) -> CloudKitBookmarkSync? {
-        (bundle.object(forInfoDictionaryKey: "KageCloudKitContainer") as? String).map(CloudKitBookmarkSync.init)
+        guard let id = bundle.object(forInfoDictionaryKey: "KageCloudKitContainer") as? String,
+              id.hasPrefix("iCloud."), !id.contains("$(") else { return nil }
+        return CloudKitBookmarkSync(containerID: id)
     }
 
     private var database: CKDatabase { CKContainer(identifier: containerID).privateCloudDatabase }
