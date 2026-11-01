@@ -16,14 +16,21 @@ public struct BrowserTab: Identifiable, Codable, Sendable, Hashable {
     public var lastActiveAt: Date
     public var state: TabState
     public var isProtected: Bool
+    public var isPinned: Bool
+    public var sortOrder: Int
     public var snapshotReference: String?
+    /// Opaque `WKWebView.interactionState` archive used to restore a suspended tab's back/forward list.
+    public var interactionState: Data?
 
     public init(id: UUID = UUID(), url: URL?, title: String = "", groupID: UUID? = nil,
                 profileID: UUID, createdAt: Date = .now, lastActiveAt: Date = .now,
-                state: TabState = .background, isProtected: Bool = false, snapshotReference: String? = nil) {
+                state: TabState = .background, isProtected: Bool = false, isPinned: Bool = false,
+                sortOrder: Int = 0, snapshotReference: String? = nil, interactionState: Data? = nil) {
         self.id = id; self.url = url; self.title = title; self.groupID = groupID
         self.profileID = profileID; self.createdAt = createdAt; self.lastActiveAt = lastActiveAt
-        self.state = state; self.isProtected = isProtected; self.snapshotReference = snapshotReference
+        self.state = state; self.isProtected = isProtected; self.isPinned = isPinned
+        self.sortOrder = sortOrder; self.snapshotReference = snapshotReference
+        self.interactionState = interactionState
     }
 }
 
@@ -158,6 +165,12 @@ public struct AISession: Identifiable, Codable, Sendable, Hashable {
     public var expiresAt: Date?
     public var localMessages: [Message]
     public var sourceReferences: [URL]
+
+    public init(id: UUID = UUID(), tabIDs: [UUID], modelID: String, createdAt: Date = .now,
+                expiresAt: Date? = nil, localMessages: [Message] = [], sourceReferences: [URL] = []) {
+        self.id = id; self.tabIDs = tabIDs; self.modelID = modelID; self.createdAt = createdAt
+        self.expiresAt = expiresAt; self.localMessages = localMessages; self.sourceReferences = sourceReferences
+    }
 }
 
 /// Spec 14.7.
@@ -170,4 +183,11 @@ public struct DownloadRecord: Identifiable, Codable, Sendable, Hashable {
     public var status: Status
     public var progress: Double?
     public var createdAt: Date
+
+    public init(id: UUID = UUID(), sourceURL: URL, filename: String, destinationBookmark: Data? = nil,
+                status: Status = .pending, progress: Double? = nil, createdAt: Date = .now) {
+        self.id = id; self.sourceURL = sourceURL; self.filename = filename
+        self.destinationBookmark = destinationBookmark; self.status = status
+        self.progress = progress; self.createdAt = createdAt
+    }
 }
