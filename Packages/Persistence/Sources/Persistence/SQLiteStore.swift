@@ -85,7 +85,9 @@ public actor SQLiteStore {
     }
 
     /// Opens the store at the default location, excluded from backups (spec 14.8).
-    public static func openDefault(name: String = "Kage.sqlite") throws -> SQLiteStore {
+    /// On iOS the folder is `completeUnlessOpen`: files Kage hasn't already opened are unreadable while the
+    /// device is locked, including to someone who copies them off the device (threat model T-12).
+    public static func openDefault(name: String = "Kage.sqlite", migrations: [Migration] = Schema.migrations) throws -> SQLiteStore {
         let fm = FileManager.default
         var dir = try fm.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
             .appendingPathComponent("Kage", isDirectory: true)
@@ -93,7 +95,17 @@ public actor SQLiteStore {
         var values = URLResourceValues()
         values.isExcludedFromBackup = true
         try? dir.setResourceValues(values)
-        return try SQLiteStore(path: dir.appendingPathComponent(name).path)
+        #if os(iOS)
+        try? fm.setAttributes([.protectionKey: FileProtectionType.completeUnlessOpen], ofItemAtPath: dir.path)
+        #endif
+        let path = dir.appendingPathComponent(name).path
+        let store = try SQLiteStore(path: path, migrations: migrations)
+        #if os(iOS)
+        for suffix in ["", "-wal", "-shm"] where fm.fileExists(atPath: path + suffix) {
+            try? fm.setAttributes([.protectionKey: FileProtectionType.completeUnlessOpen], ofItemAtPath: path + suffix)
+        }
+        #endif
+        return store
     }
 
     public var schemaVersion: Int {

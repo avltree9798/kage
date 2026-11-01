@@ -37,7 +37,8 @@ public enum TunnelKeychain {
             kSecReturnData as String: true,
         ]
         var result: CFTypeRef?
-        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess, let data = result as? Data else { return nil }
+        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess, var data = result as? Data else { return nil }
+        defer { data.resetBytes(in: 0..<data.count) }
         return String(data: data, encoding: .utf8)
     }
 

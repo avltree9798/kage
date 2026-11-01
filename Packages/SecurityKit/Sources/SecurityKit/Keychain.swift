@@ -42,8 +42,10 @@ public struct KeychainCredentialStore: CredentialStoring {
         let status = SecItemCopyMatching(q as CFDictionary, &out)
         if status == errSecItemNotFound { return nil }
         guard status == errSecSuccess else { throw KeychainError.unexpectedStatus(status) }
-        guard let data = out as? Data,
-              let dict = try? JSONDecoder().decode([String: String].self, from: data),
+        // The token is loaded per request and never cached; the raw Keychain bytes are zeroed right away.
+        guard var data = out as? Data else { throw KeychainError.malformedItem }
+        defer { data.secureWipe() }
+        guard let dict = try? JSONDecoder().decode([String: String].self, from: data),
               let acct = dict["accountID"], let token = dict["apiToken"] else { throw KeychainError.malformedItem }
         return CloudflareCredential(accountID: acct, apiToken: token)
     }
