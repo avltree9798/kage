@@ -123,3 +123,14 @@ import KageModels
         #expect(try await repo.latest()?.summary == "b")
     }
 }
+
+@Suite struct SyncMergeTests {
+    @Test func newerRemoteWinsOlderIgnored() {
+        let id = UUID()
+        let old = Date(timeIntervalSince1970: 1), new = Date(timeIntervalSince1970: 2)
+        let local = Bookmark(id: id, url: URL(string: "https://a.test")!, title: "local", modifiedAt: old)
+        let remote = Bookmark(id: id, url: URL(string: "https://a.test")!, title: "remote", modifiedAt: new)
+        #expect(SyncMerge.merge(local: [local], remote: [remote]).first?.title == "remote")
+        #expect(SyncMerge.merge(local: [remote], remote: [local]).first?.title == "remote")
+    }
+}

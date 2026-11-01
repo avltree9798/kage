@@ -92,6 +92,13 @@ struct SettingsView: View {
             }
             Section("Sync") {
                 Toggle("iCloud sync for bookmarks and reading list", isOn: $s.iCloudSync)
+                    .disabled(!env.syncAvailable)
+                    .onChange(of: s.iCloudSync) { _, on in if on { Task { await env.syncBookmarks() } } }
+                if !env.syncAvailable {
+                    Text("iCloud sync isn't set up in this build.").font(.footnote).foregroundStyle(.secondary)
+                } else if let status = env.syncStatus {
+                    Text(status).font(.footnote)
+                }
                 Text("Private sessions, history and AI chats are never synced. Turning sync off leaves everything on this device.")
                     .font(.footnote).foregroundStyle(.secondary)
             }
@@ -213,7 +220,7 @@ struct OnboardingView: View {
                         Text("No lock").tag(LockPolicy.none)
                         Text("Lock with Face ID or Touch ID").tag(LockPolicy.lockOnly)
                     }
-                    Toggle("iCloud sync for bookmarks", isOn: $s.iCloudSync)
+                    if env.syncAvailable { Toggle("iCloud sync for bookmarks", isOn: $s.iCloudSync) }
                     #if os(iOS)
                     Button("Make Kage your default browser") {
                         if let url = URL(string: UIApplication.openDefaultApplicationsSettingsURLString) { UIApplication.shared.open(url) }

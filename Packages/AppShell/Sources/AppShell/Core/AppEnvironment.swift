@@ -96,6 +96,7 @@ public final class AppEnvironment {
         if currentStore.tabs.isEmpty { currentStore.open(homeURL) }
         await runCleanup(.launch)
         await retention.startInterval()
+        await syncBookmarks()
         aiStatus = (try? await credentials.load()) == nil ? .notConfigured : .active
         #if os(iOS)
         BackgroundCleanupScheduler.schedule()
@@ -103,6 +104,25 @@ public final class AppEnvironment {
     }
 
     public var homeURL: URL? { URL(string: settings.homepage).flatMap { $0.scheme == nil ? nil : $0 } }
+
+    // MARK: Sync (spec 12, optional)
+
+    public var syncAvailable: Bool { CloudKitBookmarkSync.fromBundle() != nil }
+    public private(set) var syncStatus: String?
+
+    /// Merges local and iCloud bookmarks. Off unless the user enables it and the build has a container.
+    public func syncBookmarks() async {
+        guard settings.iCloudSync, let sync = CloudKitBookmarkSync.fromBundle() else { return }
+        do {
+            let local = try await database.bookmarks.all(folderID: nil, readingList: nil)
+            let merged = SyncMerge.merge(local: local, remote: try await sync.pull())
+            for b in merged where !local.contains(b) { try await database.bookmarks.save(b) }
+            try await sync.push(merged)
+            syncStatus = "Synced \(merged.count) bookmarks."
+        } catch {
+            syncStatus = "iCloud sync didn't finish. Local bookmarks are unchanged."
+        }
+    }
 
     // MARK: Profiles (spec 9.6)
 
