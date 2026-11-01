@@ -7,8 +7,8 @@ on:
 
 jobs:
   packages:
-    # Needs a runner image with Xcode that ships the iOS 27.2 / macOS 27 SDKs.
-    runs-on: macos-latest
+    # Xcode 27 image (macOS 27, Apple silicon) ships the iOS 27.x / macOS 27 SDKs.
+    runs-on: xcode-27
     steps:
       - uses: actions/checkout@v4
       - name: Select newest Xcode
@@ -29,7 +29,7 @@ jobs:
           if [ -n "$failed" ]; then echo "::error::Failing packages:$failed"; exit 1; fi
 
   apps:
-    runs-on: macos-latest
+    runs-on: xcode-27
     steps:
       - uses: actions/checkout@v4
       - name: Select newest Xcode
@@ -45,3 +45,30 @@ jobs:
         run: xcodebuild build -project Kage.xcodeproj -scheme KageiOS -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO -quiet
       - name: Build macOS app (unsigned)
         run: xcodebuild build -project Kage.xcodeproj -scheme KageMac -destination 'generic/platform=macOS' CODE_SIGNING_ALLOWED=NO -quiet
+
+  sdk-survey:
+    # K-02: record the real Duo / foldable API surface from the installed SDK.
+    runs-on: xcode-27
+    steps:
+      - name: Select newest Xcode
+        run: |
+          latest=$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)
+          sudo xcode-select -s "$latest"
+          xcodebuild -version
+          xcodebuild -showsdks
+          xcrun simctl list devicetypes | grep -iE "duo|fold" || true
+          xcrun simctl list runtimes
+      - name: Dump hinge, reserved region and arrangement declarations
+        run: |
+          sdk=$(xcrun --sdk iphoneos --show-sdk-path)
+          for fw in SwiftUI SwiftUICore UIKit UIKitCore; do
+            d="$sdk/System/Library/Frameworks/$fw.framework"
+            [ -d "$d" ] || continue
+            f=$(find "$d" -name "arm64e-apple-ios.swiftinterface" | head -1)
+            echo "::group::$fw $f"
+            [ -n "$f" ] && grep -nE -B3 -A12 "Hinge|hinge|ReservedRegion|reservedRegions|ArrangementView|UIArrangement|verticalBar|VerticalBar|toolbarVertical" "$f" | head -1500
+            echo "::endgroup::"
+          done
+          echo "::group::UIKit headers"
+          grep -rnE -A6 "UIHinge|ReservedRegion|UIArrangement" "$sdk/System/Library/Frameworks/UIKit.framework/Headers" | head -600 || true
+          echo "::endgroup::"
