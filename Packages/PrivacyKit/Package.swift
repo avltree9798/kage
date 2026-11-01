@@ -21,7 +21,8 @@ let package = Package(
         ),
         .testTarget(
             name: "PrivacyKitTests",
-            dependencies: ["PrivacyKit", .product(name: "KageModels", package: "KageModels")]
+            dependencies: ["PrivacyKit", .product(name: "KageModels", package: "KageModels"),
+                           .product(name: "Persistence", package: "Persistence"), .product(name: "SecurityKit", package: "SecurityKit")]
         ),
     ]
 )

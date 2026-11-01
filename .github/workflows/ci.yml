@@ -7,20 +7,127 @@ on:
 
 jobs:
   packages:
-    # Needs a runner image with Xcode that ships the iOS 27.2 / macOS 27 SDKs.
-    runs-on: macos-latest
+    # Xcode 27 image (macOS 27, Apple silicon) ships the iOS 27.x / macOS 27 SDKs.
+    runs-on: xcode-27
     steps:
       - uses: actions/checkout@v4
-      - name: Show toolchain
-        run: xcodebuild -version && swift --version
+      - name: Select newest Xcode
+        run: |
+          ls -d /Applications/Xcode*.app
+          latest=$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)
+          sudo xcode-select -s "$latest"
+          xcodebuild -version
+          xcodebuild -showsdks | grep -E "iOS|macOS"
       - name: Test packages on macOS
         run: |
-          set -e
+          failed=""
           for pkg in Packages/*/; do
             echo "::group::$pkg"
-            swift test --package-path "$pkg"
+            swift test --package-path "$pkg" || failed="$failed $pkg"
             echo "::endgroup::"
           done
-      - name: Build AppShell for iOS Simulator
-        working-directory: Packages/AppShell
-        run: xcodebuild build -scheme AppShell -destination 'generic/platform=iOS Simulator' -quiet
+          if [ -n "$failed" ]; then echo "::error::Failing packages:$failed"; exit 1; fi
+
+  apps:
+    runs-on: xcode-27
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select newest Xcode
+        run: |
+          ls -d /Applications/Xcode*.app
+          latest=$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)
+          sudo xcode-select -s "$latest"
+          xcodebuild -version
+          xcodebuild -showsdks | grep -E "iOS|macOS"
+      - name: Generate Xcode project
+        # Go builds wireguard-go for the tunnel extension (WireGuardKit's Makefile).
+        run: |
+          brew install xcodegen
+          command -v go || brew install go
+          go version
+          xcodegen generate
+      - name: Resolve packages
+        run: xcodebuild -resolvePackageDependencies -project Kage.xcodeproj
+      - name: Build iOS app (simulator, unsigned)
+        run: xcodebuild build -project Kage.xcodeproj -scheme KageiOS -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO -quiet
+      - name: Build macOS app (unsigned)
+        run: xcodebuild build -project Kage.xcodeproj -scheme KageMac -destination 'generic/platform=macOS' CODE_SIGNING_ALLOWED=NO -quiet
+
+  sdk-survey:
+    # K-02: record the real Duo / foldable API surface from the installed SDK.
+    runs-on: xcode-27
+    steps:
+      - name: Select newest Xcode
+        run: |
+          latest=$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)
+          sudo xcode-select -s "$latest"
+          xcodebuild -version
+          xcodebuild -showsdks
+          xcrun simctl list devicetypes | grep -iE "duo|fold" || true
+          xcrun simctl list runtimes
+      - name: Dump hinge, reserved region and arrangement declarations
+        run: |
+          sdk=$(xcrun --sdk iphoneos --show-sdk-path)
+          for fw in SwiftUI SwiftUICore UIKit UIKitCore; do
+            d="$sdk/System/Library/Frameworks/$fw.framework"
+            [ -d "$d" ] || continue
+            f=$(find "$d" -name "arm64e-apple-ios.swiftinterface" | head -1)
+            echo "::group::$fw $f"
+            [ -n "$f" ] && grep -nE -B3 -A12 "Hinge|hinge|ReservedRegion|reservedRegions|ArrangementView|UIArrangement|verticalBar|VerticalBar|toolbarVertical" "$f" | head -1500
+            echo "::endgroup::"
+          done
+          echo "::group::UIKit headers"
+          grep -rnE -A6 "UIHinge|ReservedRegion|UIArrangement" "$sdk/System/Library/Frameworks/UIKit.framework/Headers" | head -600 || true
+          echo "::endgroup::"
+
+  tracker-rules:
+    # Rebuilds the bundled EasyPrivacy host list and reports whether the checked-in copy is stale.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download EasyPrivacy and convert
+        run: |
+          curl -fsSL https://easylist.to/easylist/easyprivacy.txt -o /tmp/easyprivacy.txt
+          python3 scripts/build-tracker-rules.py /tmp/easyprivacy.txt /tmp/easyprivacy-hosts.txt
+          current=Packages/SecurityKit/Sources/SecurityKit/Resources/easyprivacy-hosts.txt
+          if [ -f "$current" ]; then
+            added=$(comm -13 <(grep -v '^!' "$current" | sort) <(grep -v '^!' /tmp/easyprivacy-hosts.txt | sort) | wc -l)
+            removed=$(comm -23 <(grep -v '^!' "$current" | sort) <(grep -v '^!' /tmp/easyprivacy-hosts.txt | sort) | wc -l)
+            echo "::notice::EasyPrivacy upstream differs from the bundled list by +$added / -$removed hosts"
+          fi
+      - name: Print the converted list (gzip, base64) for maintainers to check in
+        run: |
+          echo "BEGIN-EASYPRIVACY-HOSTS"
+          gzip -9c /tmp/easyprivacy-hosts.txt | base64
+          echo "END-EASYPRIVACY-HOSTS"
+
+  ui-tests:
+    # K-30 accessibility and keyboard audit, and the 100-tab memory run, on macOS. Restricted entitlements
+    # (tunnel, iCloud, keychain groups) are dropped because CI signs ad hoc; the tests don't use them.
+    runs-on: xcode-27
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select newest Xcode
+        run: |
+          latest=$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)
+          sudo xcode-select -s "$latest"
+      - name: Generate Xcode project
+        run: |
+          brew install xcodegen
+          command -v go || brew install go
+          xcodegen generate
+      - name: Run macOS UI tests
+        run: |
+          xcodebuild test -project Kage.xcodeproj -scheme KageMac -destination 'platform=macOS' \
+            CODE_SIGN_IDENTITY=- CODE_SIGN_ENTITLEMENTS= CODE_SIGNING_REQUIRED=NO \
+            -resultBundlePath UITests.xcresult
+      - name: Summarise results
+        if: always()
+        run: |
+          for f in ~/Library/Logs/DiagnosticReports/Kage*.ips; do
+            [ -f "$f" ] || continue
+            echo "::group::crash $f"; head -c 12000 "$f"; echo; echo "::endgroup::"
+          done
+          xcrun xcresulttool get test-results summary --path UITests.xcresult || true
+          xcrun xcresulttool get test-results tests --path UITests.xcresult | head -200 || true
+          xcrun xcresulttool get test-results metrics --path UITests.xcresult | head -100 || true

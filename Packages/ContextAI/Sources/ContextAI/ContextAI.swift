@@ -23,8 +23,12 @@ public struct Redactor: Sendable {
     public func redact(_ content: ExtractedContent) -> ExtractedContent {
         var text = content.text
         let patterns = [
-            #"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}"#,   // email addresses
-            #"\b(?:\d[ -]?){13,19}\b"#,                   // card-like digit runs
+            #"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}"#,           // email addresses
+            #"\b(?:\d[ -]?){13,19}\b"#,                           // card-like digit runs
+            #"\b[A-Z]{2}\d{2}(?: ?[A-Z0-9]{4}){3,7}\b"#,           // IBAN-like account numbers
+            #"\b\d{3}-\d{2}-\d{4}\b"#,                           // US SSN format
+            #"(?:bearer|token|api[_-]?key|secret|password)[\"' :=]+[A-Z0-9._~+/=-]{12,}"#, // inline credentials
+            #"\beyJ[A-Z0-9_-]{10,}\.[A-Z0-9_-]{10,}\.[A-Z0-9_-]{10,}\b"#,  // JWTs
         ]
         for p in patterns {
             text = text.replacingOccurrences(of: p, with: "[redacted]", options: [.regularExpression, .caseInsensitive])
@@ -56,10 +60,11 @@ public struct SummaryRequest: Sendable {
     }
 }
 
-public struct SummaryResult: Sendable {
+public struct SummaryResult: Sendable, Equatable {
     /// Rendered as untrusted plain text, never as HTML or script (spec 13.5 step 7).
     public var text: String
     public var proposedActions: [ProposedAction]
+    public init(text: String, proposedActions: [ProposedAction]) { self.text = text; self.proposedActions = proposedActions }
 }
 
 /// The only things AI output can suggest. Each needs user confirmation; none run automatically (spec 8.6, AT09).
@@ -75,9 +80,19 @@ public enum AIError: Error, Sendable, Equatable {
 }
 
 public protocol AIInferenceClient: Sendable {
-    func summarise(_ request: SummaryRequest) async throws -> SummaryResult
-    func ask(_ question: String, about content: ExtractedContent, modelID: String) -> AsyncThrowingStream<String, Error>
+    /// Sends chat messages and streams back text chunks. Non-streaming models yield one chunk.
+    func complete(_ messages: [ChatMessage], modelID: String, stream: Bool) -> AsyncThrowingStream<String, Error>
+    func validate() async throws -> TokenStatus
 }
+
+public struct ChatMessage: Sendable, Equatable, Codable {
+    public enum Role: String, Sendable, Codable { case system, user, assistant }
+    public var role: Role
+    public var content: String
+    public init(_ role: Role, _ content: String) { self.role = role; self.content = content }
+}
+
+public enum TokenStatus: Sendable, Equatable { case active, inactive, invalid, notConfigured }
 
 /// Builds Workers AI REST requests (spec 8.2). Endpoint: POST /client/v4/accounts/{id}/ai/run/{model}.
 /// Paths and the response shape are to be confirmed against Cloudflare docs in M0 (K-02).
@@ -92,8 +107,10 @@ public enum CloudflareRequestBuilder {
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
         req.httpShouldHandleCookies = false
+        req.timeoutInterval = 60
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if stream { req.setValue("text/event-stream", forHTTPHeaderField: "Accept") }
         let body: [String: Any] = [
             "messages": messages.map { ["role": $0.role, "content": $0.content] },
             "stream": stream,

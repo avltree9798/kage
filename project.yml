@@ -5,9 +5,23 @@ options:
   deploymentTarget:
     iOS: "27.2"
     macOS: "27.0"
+settings:
+  base:
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "6.0"
+    # CloudKit container for optional bookmark sync (spec 10). Create it in the developer portal first;
+    # an empty value turns sync off for the build.
+    KAGE_CLOUDKIT_CONTAINER: iCloud.dev.kage
 packages:
   AppShell:
     path: Packages/AppShell
+  NetworkTunnel:
+    path: Packages/NetworkTunnel
+  SecurityKit:
+    path: Packages/SecurityKit
+  WireGuardKit:
+    path: Vendor/WireGuardKit
 targets:
   KageiOS:
     type: application
@@ -15,17 +29,166 @@ targets:
     sources: [Apps/KageiOS/Sources]
     dependencies:
       - package: AppShell
+      - target: KageTunneliOS
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.kage.ios
+        TARGETED_DEVICE_FAMILY: "1,2"
+        CODE_SIGN_ENTITLEMENTS: Apps/KageiOS/Kage.entitlements
     info:
       path: Apps/KageiOS/Info.plist
       properties:
+        CFBundleDisplayName: Kage
+        KageCloudKitContainer: $(KAGE_CLOUDKIT_CONTAINER)
+        KageKeychainGroup: $(AppIdentifierPrefix)dev.kage.shared
         UILaunchScreen: {}
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: true
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight, UIInterfaceOrientationPortraitUpsideDown]
+        UIBackgroundModes: [fetch]
+        BGTaskSchedulerPermittedIdentifiers: [dev.kage.cleanup]
+        NSFaceIDUsageDescription: Kage uses Face ID to unlock your locked browsing session and Vault.
+        NSCameraUsageDescription: Websites you allow can use the camera, for example for video calls.
+        NSMicrophoneUsageDescription: Websites you allow can use the microphone, for example for video calls.
+        NSLocationWhenInUseUsageDescription: Websites you allow can request your location.
+        NSUserActivityTypes: [NSUserActivityTypeBrowsingWeb]
+        CFBundleURLTypes:
+          - CFBundleURLName: Web
+            CFBundleURLSchemes: [http, https]
   KageMac:
     type: application
     platform: macOS
     sources: [Apps/KageMac/Sources]
     dependencies:
       - package: AppShell
+      - target: KageTunnelMac
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.kage.mac
+        CODE_SIGN_ENTITLEMENTS: Apps/KageMac/Kage.entitlements
+        ENABLE_HARDENED_RUNTIME: YES
     info:
       path: Apps/KageMac/Info.plist
+      properties:
+        CFBundleDisplayName: Kage
+        KageCloudKitContainer: $(KAGE_CLOUDKIT_CONTAINER)
+        KageKeychainGroup: $(AppIdentifierPrefix)dev.kage.shared
+        LSApplicationCategoryType: public.app-category.productivity
+        NSCameraUsageDescription: Websites you allow can use the camera, for example for video calls.
+        NSMicrophoneUsageDescription: Websites you allow can use the microphone, for example for video calls.
+        NSLocationWhenInUseUsageDescription: Websites you allow can request your location.
+        NSUserActivityTypes: [NSUserActivityTypeBrowsingWeb]
+        CFBundleURLTypes:
+          - CFBundleURLName: Web
+            CFBundleURLSchemes: [http, https]
+
+  # WireGuard packet tunnel (ADR-008 rev. 2). One extension per platform, each with the Go bridge that
+  # WireGuardKit links against, built by wireguard-apple's own Makefile (needs Go on the build Mac).
+  KageTunneliOS:
+    type: app-extension
+    platform: iOS
+    sources: [Apps/KageTunnel/Sources]
+    dependencies:
+      - target: WireGuardGoBridgeiOS
+      - package: WireGuardKit
+      - package: NetworkTunnel
+      - package: SecurityKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.kage.ios.tunnel
+        PRODUCT_NAME: KageTunnel
+        CODE_SIGN_ENTITLEMENTS: Apps/KageTunnel/iOS.entitlements
+        SWIFT_VERSION: "5.0"
+        APPLICATION_EXTENSION_API_ONLY: YES
+    info:
+      path: Apps/KageTunnel/Info-iOS.plist
+      properties:
+        CFBundleDisplayName: Kage Tunnel
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.networkextension.packet-tunnel
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).PacketTunnelProvider
+  KageTunnelMac:
+    type: app-extension
+    platform: macOS
+    sources: [Apps/KageTunnel/Sources]
+    dependencies:
+      - target: WireGuardGoBridgemacOS
+      - package: WireGuardKit
+      - package: NetworkTunnel
+      - package: SecurityKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.kage.mac.tunnel
+        PRODUCT_NAME: KageTunnel
+        CODE_SIGN_ENTITLEMENTS: Apps/KageTunnel/Mac.entitlements
+        SWIFT_VERSION: "5.0"
+        APPLICATION_EXTENSION_API_ONLY: YES
+        ENABLE_HARDENED_RUNTIME: YES
+    info:
+      path: Apps/KageTunnel/Info-Mac.plist
+      properties:
+        CFBundleDisplayName: Kage Tunnel
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.networkextension.packet-tunnel
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).PacketTunnelProvider
+  WireGuardGoBridgeiOS:
+    type: ""
+    platform: iOS
+    legacy:
+      toolPath: /usr/bin/make
+      arguments: $(ACTION)
+      passSettings: true
+      workingDirectory: $(PROJECT_DIR)/Vendor/WireGuardKit/Sources/WireGuardKitGo
+    settings:
+      base:
+        SDKROOT: iphoneos
+  WireGuardGoBridgemacOS:
+    type: ""
+    platform: macOS
+    legacy:
+      toolPath: /usr/bin/make
+      arguments: $(ACTION)
+      passSettings: true
+      workingDirectory: $(PROJECT_DIR)/Vendor/WireGuardKit/Sources/WireGuardKitGo
+    settings:
+      base:
+        SDKROOT: macosx
+
+  # K-30 / memory: UI tests. The macOS bundle runs in CI; the iOS bundle needs an iOS 27.2 simulator or device.
+  KageMacUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    sources: [Apps/KageUITests]
+    dependencies:
+      - target: KageMac
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.kage.mac.uitests
+        TEST_TARGET_NAME: KageMac
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: "5.0"
+  KageiOSUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [Apps/KageUITests]
+    dependencies:
+      - target: KageiOS
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.kage.ios.uitests
+        TEST_TARGET_NAME: KageiOS
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: "5.0"
+schemes:
+  KageMac:
+    build:
+      targets:
+        KageMac: all
+    test:
+      targets: [KageMacUITests]
+  KageiOS:
+    build:
+      targets:
+        KageiOS: all
+    test:
+      targets: [KageiOSUITests]

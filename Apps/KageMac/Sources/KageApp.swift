@@ -3,7 +3,5 @@ import AppShell
 
 @main
 struct KageApp: App {
-    var body: some Scene {
-        WindowGroup { RootView() }
-    }
+    var body: some Scene { KageScene() }
 }

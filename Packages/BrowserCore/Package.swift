@@ -9,6 +9,7 @@ let package = Package(
         .package(path: "../KageModels"),
         .package(path: "../Persistence"),
         .package(path: "../PrivacyKit"),
+        .package(path: "../SecurityKit"),
     ],
     targets: [
         .target(
@@ -17,8 +18,13 @@ let package = Package(
                 .product(name: "KageModels", package: "KageModels"),
                 .product(name: "Persistence", package: "Persistence"),
                 .product(name: "PrivacyKit", package: "PrivacyKit"),
+                .product(name: "SecurityKit", package: "SecurityKit"),
             ]
         ),
-        .testTarget(name: "BrowserCoreTests", dependencies: ["BrowserCore"]),
+        .testTarget(
+            name: "BrowserCoreTests",
+            dependencies: ["BrowserCore", .product(name: "KageModels", package: "KageModels"),
+                           .product(name: "Persistence", package: "Persistence"), .product(name: "PrivacyKit", package: "PrivacyKit")]
+        ),
     ]
 )
