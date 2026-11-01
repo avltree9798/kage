@@ -74,8 +74,9 @@ public actor VaultSealedStore {
             rows.append((id, sealed))
         }
         let kindName = kind.rawValue
+        let sealedRows = rows
         try await store.transaction { db in
-            for (id, sealed) in rows {
+            for (id, sealed) in sealedRows {
                 try db.execute("INSERT OR REPLACE INTO vault_records (kind, id, sealed) VALUES (?, ?, ?)", [kindName, id, sealed])
             }
         }
