@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "defaultProfile": "standard",
+  "profiles": {
+    "standard": { "retentionMinutes": 1440, "historyEnabled": true,  "aiAutoProcessing": false, "store": "persistent" },
+    "ghost":    { "retentionMinutes": 15,   "historyEnabled": true,  "aiAutoProcessing": false, "store": "persistent" },
+    "vault":    { "retentionMinutes": null, "historyEnabled": true,  "aiAutoProcessing": false, "store": "persistent", "lock": "lockOnly" },
+    "private":  { "retentionMinutes": 0,    "historyEnabled": false, "aiAutoProcessing": false, "store": "nonPersistent" }
+  },
+  "smartPreSummary": false
+}
