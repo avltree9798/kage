@@ -101,6 +101,14 @@ struct CanvasView: View {
                 #endif
                 .autocorrectionDisabled()
                 .onSubmit { submit(omniboxText) }
+                .accessibilityIdentifier("omnibox")
+                .accessibilityLabel("Address and search")
+                .background {
+                    // Cmd-L focuses the address field (K-30 keyboard path); invisible and not an accessibility element.
+                    Button("Open Location") { omniboxFocused = true }
+                        .keyboardShortcut("l", modifiers: .command)
+                        .opacity(0).frame(width: 0, height: 0).accessibilityHidden(true)
+                }
                 .onChange(of: omniboxFocused) { _, f in
                     editing = f
                     if !f { omniboxText = tab?.url?.absoluteString ?? omniboxText }

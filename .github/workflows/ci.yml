@@ -100,3 +100,30 @@ jobs:
           echo "BEGIN-EASYPRIVACY-HOSTS"
           gzip -9c /tmp/easyprivacy-hosts.txt | base64
           echo "END-EASYPRIVACY-HOSTS"
+
+  ui-tests:
+    # K-30 accessibility and keyboard audit, and the 100-tab memory run, on macOS. Restricted entitlements
+    # (tunnel, iCloud, keychain groups) are dropped because CI signs ad hoc; the tests don't use them.
+    runs-on: xcode-27
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select newest Xcode
+        run: |
+          latest=$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)
+          sudo xcode-select -s "$latest"
+      - name: Generate Xcode project
+        run: |
+          brew install xcodegen
+          command -v go || brew install go
+          xcodegen generate
+      - name: Run macOS UI tests
+        run: |
+          xcodebuild test -project Kage.xcodeproj -scheme KageMac -destination 'platform=macOS' \
+            CODE_SIGN_IDENTITY=- CODE_SIGN_ENTITLEMENTS= CODE_SIGNING_REQUIRED=NO \
+            -resultBundlePath UITests.xcresult
+      - name: Summarise results
+        if: always()
+        run: |
+          xcrun xcresulttool get test-results summary --path UITests.xcresult || true
+          xcrun xcresulttool get test-results tests --path UITests.xcresult | head -200 || true
+          xcrun xcresulttool get test-results metrics --path UITests.xcresult | head -100 || true

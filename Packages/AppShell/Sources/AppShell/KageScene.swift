@@ -2,10 +2,34 @@
 import SwiftUI
 import KageModels
 import DesignSystem
+import Persistence
+import SecurityKit
+
+extension AppEnvironment {
+    /// `-KageUITesting` (UI tests only) starts with onboarding done, a throwaway settings suite, an in-memory
+    /// database and no Keychain access, so tests never touch the user's real data. `-KageUITestTabs N` opens N
+    /// tabs of `KAGE_UITEST_URL` (default https://example.com/) for the 100-tab memory test.
+    static func forLaunch(_ process: ProcessInfo = .processInfo) -> AppEnvironment {
+        guard process.arguments.contains("-KageUITesting") else { return AppEnvironment() }
+        let suite = "dev.kage.uitests"
+        let defaults = UserDefaults(suiteName: suite) ?? .standard
+        defaults.removePersistentDomain(forName: suite)
+        let settings = AppSettings(defaults: defaults)
+        settings.onboardingComplete = true
+        settings.homepage = "about:blank"
+        let env = AppEnvironment(settings: settings, database: try? KageDatabase.inMemory(), credentials: InMemoryCredentialStore())
+        if let i = process.arguments.firstIndex(of: "-KageUITestTabs"), i + 1 < process.arguments.count,
+           let n = Int(process.arguments[i + 1]) {
+            env.uiTestTabCount = min(n, 200)
+            env.uiTestURL = process.environment["KAGE_UITEST_URL"].flatMap(URL.init(string:)) ?? URL(string: "https://example.com/")!
+        }
+        return env
+    }
+}
 
 /// The app's scene, shared by the iOS/iPadOS and macOS targets.
 public struct KageScene: Scene {
-    @State private var env = AppEnvironment()
+    @State private var env = AppEnvironment.forLaunch()
 
     public init() {}
 

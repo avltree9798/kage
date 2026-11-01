@@ -10,4 +10,6 @@ Kage's changes:
   boottime patch is allowed to fail on Go versions it no longer applies to. Without that patch, Go timers use the
   monotonic clock, which pauses while the device sleeps, so the first handshake after a wake can be late.
 
+- `Sources/WireGuardKitC/WireGuardKitC.h`: includes `<sys/types.h>`, which Xcode 27's explicit modules need for `u_int32_t`.
+
 To update: replace the three Sources folders from upstream and re-apply the two changes above.

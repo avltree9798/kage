@@ -149,3 +149,40 @@ targets:
     settings:
       base:
         SDKROOT: macosx
+
+  # K-30 / memory: UI tests. The macOS bundle runs in CI; the iOS bundle needs an iOS 27.2 simulator or device.
+  KageMacUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    sources: [Apps/KageUITests]
+    dependencies:
+      - target: KageMac
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.kage.mac.uitests
+        TEST_TARGET_NAME: KageMac
+        GENERATE_INFOPLIST_FILE: YES
+  KageiOSUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [Apps/KageUITests]
+    dependencies:
+      - target: KageiOS
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.kage.ios.uitests
+        TEST_TARGET_NAME: KageiOS
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  KageMac:
+    build:
+      targets:
+        KageMac: all
+    test:
+      targets: [KageMacUITests]
+  KageiOS:
+    build:
+      targets:
+        KageiOS: all
+    test:
+      targets: [KageiOSUITests]

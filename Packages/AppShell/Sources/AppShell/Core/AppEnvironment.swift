@@ -39,6 +39,9 @@ public final class AppEnvironment {
     public private(set) var aiStatus: TokenStatus = .notConfigured
     public var isContextVisible = true
     public var vaultUnlocked = false
+    /// UI-test only (see `forLaunch`): tabs to open at start.
+    @ObservationIgnored var uiTestTabCount = 0
+    @ObservationIgnored var uiTestURL: URL?
 
     public init(settings: AppSettings = AppSettings(), database: KageDatabase? = nil,
                 credentials: CredentialStoring? = nil, capabilities: DeviceCapabilityProviding = DuoCapabilityAdapter()) {
@@ -107,6 +110,13 @@ public final class AppEnvironment {
         await downloads.load()
         await store(for: currentKind).restore()
         if currentStore.tabs.isEmpty { currentStore.open(homeURL) }
+        if uiTestTabCount > 0, let url = uiTestURL {
+            for i in 0..<uiTestTabCount {
+                var c = URLComponents(url: url, resolvingAgainstBaseURL: false)
+                c?.queryItems = (c?.queryItems ?? []) + [URLQueryItem(name: "kage-tab", value: String(i))]
+                currentStore.open(c?.url ?? url)
+            }
+        }
         await runCleanup(.launch)
         await retention.startInterval()
         await syncBookmarks()
