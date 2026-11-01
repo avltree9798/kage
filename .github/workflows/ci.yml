@@ -95,7 +95,8 @@ jobs:
             removed=$(comm -23 <(grep -v '^!' "$current" | sort) <(grep -v '^!' /tmp/easyprivacy-hosts.txt | sort) | wc -l)
             echo "::notice::EasyPrivacy upstream differs from the bundled list by +$added / -$removed hosts"
           fi
-      - uses: actions/upload-artifact@v4
-        with:
-          name: easyprivacy-hosts
-          path: /tmp/easyprivacy-hosts.txt
+      - name: Print the converted list (gzip, base64) for maintainers to check in
+        run: |
+          echo "BEGIN-EASYPRIVACY-HOSTS"
+          gzip -9c /tmp/easyprivacy-hosts.txt | base64
+          echo "END-EASYPRIVACY-HOSTS"
