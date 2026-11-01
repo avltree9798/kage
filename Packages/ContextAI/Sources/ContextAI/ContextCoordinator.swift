@@ -142,6 +142,9 @@ public final class ContextCoordinator {
         session = nil
     }
 
+    /// Waits for the request in flight, if any. Used by tests and by callers that chain actions.
+    public func waitForCurrentRequest() async { await currentTask?.value }
+
     public func resolveConsent(_ allowed: Bool) {
         consentRequest = nil
         consentContinuation?.resume(returning: allowed)
