@@ -1,0 +1,280 @@
+#if canImport(WebKit)
+import Foundation
+import Observation
+import WebKit
+import KageModels
+import Persistence
+import SecurityKit
+import PrivacyKit
+import BrowserCore
+import ContextAI
+import PlatformAdapters
+
+/// Composition root: builds every service once and wires them together.
+@MainActor @Observable
+public final class AppEnvironment {
+    public let settings: AppSettings
+    public let database: KageDatabase
+    public let policy: PrivacyPolicyEngine
+    public let protectedSites: ProtectedSiteRegistry
+    public let contentBlocking: ContentBlockingManager
+    public let factory: WebViewFactory
+    public let downloads: DownloadManager
+    public let permissions: SitePermissionStore
+    public let prompts = PromptCenter()
+    public let credentials: CredentialStoring
+    public let context: ContextCoordinator
+    public let lock: SessionLockCoordinator
+    public let network = NetworkProtectionMonitor()
+    public let capabilities: DeviceCapabilityProviding
+    public let retention: HistoryRetentionActor
+    public let cleaner: WebsiteDataCleanupService
+    @ObservationIgnored public var openExternalURL: (@MainActor (URL) -> Void)?
+
+    public private(set) var stores: [PrivacyProfile.Kind: BrowserTabStore] = [:]
+    public private(set) var currentKind: PrivacyProfile.Kind
+    public private(set) var protectedSiteList: [ProtectedSite] = []
+    public private(set) var lastCleanup: CleanupLogEntry?
+    public private(set) var aiStatus: TokenStatus = .notConfigured
+    public var isContextVisible = true
+    public var vaultUnlocked = false
+
+    public init(settings: AppSettings = AppSettings(), database: KageDatabase? = nil,
+                credentials: CredentialStoring? = nil, capabilities: DeviceCapabilityProviding = DuoCapabilityAdapter()) {
+        self.settings = settings
+        let db = database ?? ((try? KageDatabase(store: SQLiteStore.openDefault())) ?? (try! KageDatabase.inMemory()))
+        self.database = db
+        self.capabilities = capabilities
+        let creds = credentials ?? KeychainCredentialStore()
+        self.credentials = creds
+        policy = PrivacyPolicyEngine()
+        protectedSites = ProtectedSiteRegistry(repository: db.protectedSites, history: db.history)
+        contentBlocking = ContentBlockingManager(mode: settings.blockingMode, exceptions: Set(settings.blockingExceptions))
+        factory = WebViewFactory(contentBlocking: contentBlocking)
+        downloads = DownloadManager(repository: db.downloads)
+        permissions = SitePermissionStore(repository: db.siteSettings)
+        context = ContextCoordinator(client: CloudflareAIClient(credentials: creds), policy: policy, sessions: db.aiSessions)
+        currentKind = settings.defaultProfile
+
+        let stores = factory.dataStores
+        let profileIDs = PrivacyProfile.builtIn.compactMap { p -> UUID? in
+            if case .persistent(let id) = p.storeStrategy { return id } else { return nil }
+        }
+        let adapter = WebKitDataStoreAdapter(storeIdentifiers: profileIDs, nonPersistent: stores.activeNonPersistentStores)
+        cleaner = WebsiteDataCleanupService(history: db.history, aiSessions: db.aiSessions, webKit: adapter)
+        let registry = protectedSites
+        let settingsRef = settings
+        retention = HistoryRetentionActor(cleaner: cleaner, log: db.cleanupLog,
+                                          protectedSites: { (try? await registry.all()) ?? [] },
+                                          cleanWebsiteDataOnRoutine: { await MainActor.run { settingsRef.cleanWebsiteDataRoutinely } })
+        let cleanerRef = cleaner
+        lock = SessionLockCoordinator(mode: settings.lockMode, authenticator: BiometricAuthenticator()) { mode in
+            switch mode {
+            case .lockAndForget:
+                let sites = (try? await registry.all()) ?? []
+                let (_, report) = await cleanerRef.clean(scope: .routine, protectedSites: sites)
+                return report.isComplete ? "Temporary records cleared." : "Some temporary records couldn't be cleared: \(report.summary)."
+            default:
+                return nil
+            }
+        }
+        context.modelID = settings.aiModelID ?? context.registry.defaultModelID
+        context.smartPreSummaryEnabled = settings.smartPreSummary
+        context.pages = self
+        applyLockSettings()
+        downloads.resumeHost = { [weak self] in self?.currentStore.activeTab?.webView }
+    }
+
+    // MARK: Startup
+
+    public func start() async {
+        try? await contentBlocking.update(mode: settings.blockingMode, exceptions: Set(settings.blockingExceptions))
+        await refreshProtectedSites()
+        await applyRetentionOverride()
+        await downloads.load()
+        await store(for: currentKind).restore()
+        if currentStore.tabs.isEmpty { currentStore.open(homeURL) }
+        await runCleanup(.launch)
+        await retention.startInterval()
+        aiStatus = (try? await credentials.load()) == nil ? .notConfigured : .active
+        #if os(iOS)
+        BackgroundCleanupScheduler.schedule()
+        #endif
+    }
+
+    public var homeURL: URL? { URL(string: settings.homepage).flatMap { $0.scheme == nil ? nil : $0 } }
+
+    // MARK: Profiles (spec 9.6)
+
+    public var currentStore: BrowserTabStore { store(for: currentKind) }
+    public var currentProfile: PrivacyProfile { currentStore.profile }
+
+    public func store(for kind: PrivacyProfile.Kind) -> BrowserTabStore {
+        if let s = stores[kind] { return s }
+        let profile = PrivacyProfile.builtIn.first { $0.kind == kind } ?? .standard
+        let s = BrowserTabStore(profile: profile, factory: factory, downloads: downloads, permissions: permissions,
+                                tabRepository: database.tabs, history: database.history, policy: policy)
+        s.presenter = prompts
+        s.searchEngine = settings.searchEngine
+        s.homeURL = homeURL
+        s.externalOpener = { [weak self] url in self?.openExternalURL?(url) }
+        s.onTabClosed = { [weak self] _ in
+            guard let self else { return }
+            Task { await self.runCleanup(.tabClosed) }
+        }
+        stores[kind] = s
+        return s
+    }
+
+    /// Switching profile. Vault asks for authentication first; leaving Private discards its session.
+    public func switchProfile(to kind: PrivacyProfile.Kind) async {
+        guard kind != currentKind else { return }
+        if kind == .vault && !vaultUnlocked {
+            guard (try? await BiometricAuthenticator().authenticate(reason: "Open your Vault")) == true else { return }
+            vaultUnlocked = true
+        }
+        let leaving = currentKind
+        currentKind = kind
+        let s = store(for: kind)
+        if s.tabs.isEmpty { await s.restore() }
+        if s.tabs.isEmpty { s.open(homeURL) }
+        if leaving == .private { _ = await endPrivateSession() }
+    }
+
+    /// AT06: closing the private session drops its tabs and its in-memory WebKit store.
+    @discardableResult
+    public func endPrivateSession() async -> Int {
+        guard let s = stores[.private] else { return 0 }
+        let n = await s.endSession()
+        stores[.private] = nil
+        return n
+    }
+
+    public func openNewPrivateWindow() async { await switchProfile(to: .private) }
+
+    // MARK: Privacy
+
+    public func refreshProtectedSites() async {
+        protectedSiteList = (try? await protectedSites.all()) ?? []
+        await policy.update(protectedSites: protectedSiteList)
+        lastCleanup = try? await database.cleanupLog.latest()
+    }
+
+    public func protect(_ site: ProtectedSite) async {
+        try? await protectedSites.protect(site)
+        await refreshProtectedSites()
+    }
+
+    public func unprotect(_ site: ProtectedSite) async {
+        try? await protectedSites.unprotect(site)
+        await refreshProtectedSites()
+    }
+
+    public func applyRetentionOverride() async {
+        for var p in PrivacyProfile.builtIn where p.kind != .private {
+            if let r = settings.retentionOverride, p.kind == settings.defaultProfile { p.retention = r }
+            p.aiAutoProcessing = settings.smartPreSummary
+            await policy.update(profile: p)
+        }
+        context.smartPreSummaryEnabled = settings.smartPreSummary
+    }
+
+    public func runCleanup(_ trigger: CleanupTrigger) async {
+        await retention.run(trigger: trigger, websiteData: [])
+        lastCleanup = try? await database.cleanupLog.latest()
+    }
+
+    public var forgetNow: ForgetNowService {
+        let registry = protectedSites
+        return ForgetNowService(cleaner: cleaner, protectedSites: { (try? await registry.all()) ?? [] },
+                                closeEphemeralTabs: { [weak self] in await self?.closeEphemeralTabs() ?? 0 })
+    }
+
+    /// Ghost and Private tabs are the temporary ones (spec 9.7).
+    func closeEphemeralTabs() async -> Int {
+        var n = 0
+        if let g = stores[.ghost] { n += g.tabs.count; g.closeAll() }
+        n += await endPrivateSession()
+        return n
+    }
+
+    public func applyLockSettings() {
+        lock.mode = settings.lockMode
+        var t: LockTriggers = [.manual, .deviceLock, .deviceClose]
+        if settings.lockOnBackground { t.insert(.appBackground) }
+        if settings.lockOnInactivity { t.insert(.inactivity) }
+        lock.triggers = t
+        lock.inactivityTimeout = .seconds(settings.inactivityMinutes * 60)
+    }
+
+    public func applyBlockingSettings() async {
+        try? await contentBlocking.update(mode: settings.blockingMode, exceptions: Set(settings.blockingExceptions))
+        for s in stores.values { for t in s.tabs { if let wv = t.webView { contentBlocking.apply(to: wv.configuration.userContentController) } } }
+    }
+
+    public func refreshAIStatus() async {
+        aiStatus = (try? await CloudflareAIClient(credentials: credentials).validate()) ?? .invalid
+    }
+
+    // MARK: Throw to Context (spec 7.2, AT12)
+
+    public enum ThrowTarget: Sendable { case backgroundTab, summarise, research, bookmark, readingList, note }
+
+    /// Never replaces the active Canvas tab unless the user asks.
+    public func throwToContext(_ url: URL, target: ThrowTarget, title: String? = nil) async {
+        let store = currentStore
+        switch target {
+        case .backgroundTab:
+            store.open(url, background: true, after: store.activeTabID)
+        case .summarise:
+            let id = store.open(url, background: true, after: store.activeTabID)
+            isContextVisible = true
+            await prepareBackground(id)
+            context.summarise(tabID: id)
+        case .research:
+            let id = store.open(url, background: true, after: store.activeTabID)
+            context.addToResearch(id)
+            isContextVisible = true
+        case .bookmark:
+            try? await database.bookmarks.save(Bookmark(url: url, title: title ?? url.kageHost))
+        case .readingList:
+            try? await database.bookmarks.save(Bookmark(url: url, title: title ?? url.kageHost, isReadingList: true))
+        case .note:
+            await context.saveNote(title ?? url.absoluteString, source: url)
+        }
+    }
+
+    /// Loads a background tab enough to read it, without changing the active tab.
+    func prepareBackground(_ id: UUID) async {
+        let store = currentStore
+        guard let tab = store.tabs.first(where: { $0.id == id }) else { return }
+        if !tab.isResident {
+            let active = store.activeTabID
+            await store.activate(id)
+            if let active { await store.activate(active) }
+        }
+        for _ in 0..<100 where tab.isLoading || tab.url == nil { try? await Task.sleep(for: .milliseconds(100)) }
+    }
+}
+
+extension AppEnvironment: PageContentProviding {
+    public func extractedContent(tabID: UUID, maxBytes: Int) async -> ExtractedContent? {
+        for s in stores.values {
+            guard let tab = s.tabs.first(where: { $0.id == tabID }) else { continue }
+            if !tab.isResident { await prepareBackground(tabID) }
+            guard let url = tab.url else { return nil }
+            if maxBytes <= 1 { return ExtractedContent(sourceURL: url, title: tab.title, text: "") }
+            if let reader = await tab.readerDocument(), reader.isUsable {
+                return ExtractedContent(sourceURL: url, title: reader.title.isEmpty ? tab.title : reader.title, text: reader.text)
+            }
+            guard let text = await tab.pageText(maxChars: maxBytes) else { return nil }
+            return ExtractedContent(sourceURL: url, title: text.title, text: text.text)
+        }
+        return nil
+    }
+
+    public func profileID(for tabID: UUID) -> UUID {
+        stores.values.first { $0.tabs.contains { $0.id == tabID } }?.profile.id ?? currentProfile.id
+    }
+}
+#endif

@@ -21,6 +21,14 @@ jobs:
             swift test --package-path "$pkg"
             echo "::endgroup::"
           done
-      - name: Build AppShell for iOS Simulator
-        working-directory: Packages/AppShell
-        run: xcodebuild build -scheme AppShell -destination 'generic/platform=iOS Simulator' -quiet
+
+  apps:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate Xcode project
+        run: brew install xcodegen && xcodegen generate
+      - name: Build iOS app (simulator, unsigned)
+        run: xcodebuild build -project Kage.xcodeproj -scheme KageiOS -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO -quiet
+      - name: Build macOS app (unsigned)
+        run: xcodebuild build -project Kage.xcodeproj -scheme KageMac -destination 'generic/platform=macOS' CODE_SIGNING_ALLOWED=NO -quiet

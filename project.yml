@@ -5,6 +5,11 @@ options:
   deploymentTarget:
     iOS: "27.2"
     macOS: "27.0"
+settings:
+  base:
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "6.0"
 packages:
   AppShell:
     path: Packages/AppShell
@@ -15,17 +20,49 @@ targets:
     sources: [Apps/KageiOS/Sources]
     dependencies:
       - package: AppShell
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.kage.ios
+        TARGETED_DEVICE_FAMILY: "1,2"
+        CODE_SIGN_ENTITLEMENTS: Apps/KageiOS/Kage.entitlements
     info:
       path: Apps/KageiOS/Info.plist
       properties:
+        CFBundleDisplayName: Kage
         UILaunchScreen: {}
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: true
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight, UIInterfaceOrientationPortraitUpsideDown]
+        UIBackgroundModes: [fetch]
+        BGTaskSchedulerPermittedIdentifiers: [dev.kage.cleanup]
+        NSFaceIDUsageDescription: Kage uses Face ID to unlock your locked browsing session and Vault.
+        NSCameraUsageDescription: Websites you allow can use the camera, for example for video calls.
+        NSMicrophoneUsageDescription: Websites you allow can use the microphone, for example for video calls.
+        NSLocationWhenInUseUsageDescription: Websites you allow can request your location.
+        NSUserActivityTypes: [NSUserActivityTypeBrowsingWeb]
+        CFBundleURLTypes:
+          - CFBundleURLName: Web
+            CFBundleURLSchemes: [http, https]
   KageMac:
     type: application
     platform: macOS
     sources: [Apps/KageMac/Sources]
     dependencies:
       - package: AppShell
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.kage.mac
+        CODE_SIGN_ENTITLEMENTS: Apps/KageMac/Kage.entitlements
+        ENABLE_HARDENED_RUNTIME: YES
     info:
       path: Apps/KageMac/Info.plist
+      properties:
+        CFBundleDisplayName: Kage
+        LSApplicationCategoryType: public.app-category.productivity
+        NSCameraUsageDescription: Websites you allow can use the camera, for example for video calls.
+        NSMicrophoneUsageDescription: Websites you allow can use the microphone, for example for video calls.
+        NSLocationWhenInUseUsageDescription: Websites you allow can request your location.
+        NSUserActivityTypes: [NSUserActivityTypeBrowsingWeb]
+        CFBundleURLTypes:
+          - CFBundleURLName: Web
+            CFBundleURLSchemes: [http, https]

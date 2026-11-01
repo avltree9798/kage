@@ -7,6 +7,7 @@ let package = Package(
     products: [.library(name: "AppShell", targets: ["AppShell"])],
     dependencies: [
         .package(path: "../KageModels"),
+        .package(path: "../Persistence"),
         .package(path: "../BrowserCore"),
         .package(path: "../PrivacyKit"),
         .package(path: "../ContextAI"),
@@ -19,6 +20,7 @@ let package = Package(
             name: "AppShell",
             dependencies: [
                 .product(name: "KageModels", package: "KageModels"),
+                .product(name: "Persistence", package: "Persistence"),
                 .product(name: "BrowserCore", package: "BrowserCore"),
                 .product(name: "PrivacyKit", package: "PrivacyKit"),
                 .product(name: "ContextAI", package: "ContextAI"),
@@ -27,6 +29,9 @@ let package = Package(
                 .product(name: "DesignSystem", package: "DesignSystem"),
             ]
         ),
-        .testTarget(name: "AppShellTests", dependencies: ["AppShell"]),
+        .testTarget(
+            name: "AppShellTests",
+            dependencies: ["AppShell", .product(name: "PrivacyKit", package: "PrivacyKit"), .product(name: "KageModels", package: "KageModels")]
+        ),
     ]
 )
