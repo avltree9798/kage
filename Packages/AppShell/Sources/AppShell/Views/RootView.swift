@@ -143,9 +143,9 @@ public struct RootView: View {
             .gesture(DragGesture().onChanged { v in
                 contextFraction = min(0.8, max(0.35, (v.location.x + total * contextFraction) / total))
             })
-            .accessibilityLabel("Resize Context panel")
-            .accessibilityAdjustableAction { dir in
-                contextFraction = min(0.8, max(0.35, contextFraction + (dir == .increment ? 0.05 : -0.05)))
+            // Exposed as a slider so assistive tech knows its role (K-30 audit: "Unknown role").
+            .accessibilityRepresentation {
+                Slider(value: $contextFraction, in: 0.35...0.8, step: 0.05) { Text("Resize Context panel") }
             }
     }
 
