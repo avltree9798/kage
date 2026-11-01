@@ -5,3 +5,5 @@ DerivedData/
 *.xcodeproj/
 xcuserdata/
 *.xcuserstate
+Config/Team.xcconfig
+Apps/*/Info-Local.plist

@@ -1,0 +1,88 @@
+# Local development build for a free (Personal Team) Apple account.
+#   xcodegen generate --spec project-local.yml && open KageLocal.xcodeproj
+# Personal teams can't sign Network Extensions, iCloud, shared Keychain groups or the default-browser
+# entitlement, so this build leaves out the WireGuard tunnel, Encrypted DNS and iCloud bookmark sync.
+# Everything else is the same code as the release build. Bundle IDs include your macOS user name,
+# because a free team needs IDs no one else has registered.
+name: KageLocal
+options:
+  bundleIdPrefix: dev.kage.local
+  deploymentTarget:
+    iOS: "27.2"
+    macOS: "27.0"
+configFiles:
+  Debug: Config/Local.xcconfig
+  Release: Config/Local.xcconfig
+settings:
+  base:
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "6.0"
+    CODE_SIGN_STYLE: Automatic
+packages:
+  AppShell:
+    path: Packages/AppShell
+targets:
+  KageiOSLocal:
+    type: application
+    platform: iOS
+    sources: [Apps/KageiOS/Sources]
+    dependencies:
+      - package: AppShell
+    settings:
+      base:
+        PRODUCT_NAME: Kage
+        PRODUCT_BUNDLE_IDENTIFIER: dev.kage.local.$(KAGE_LOCAL_ID).ios
+        TARGETED_DEVICE_FAMILY: "1,2"
+        CODE_SIGN_ENTITLEMENTS: Apps/KageiOS/KageLocal.entitlements
+    info:
+      path: Apps/KageiOS/Info-Local.plist
+      properties:
+        CFBundleDisplayName: Kage
+        KageLocalBuild: true
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: true
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight, UIInterfaceOrientationPortraitUpsideDown]
+        UIBackgroundModes: [fetch]
+        BGTaskSchedulerPermittedIdentifiers: [dev.kage.cleanup]
+        NSFaceIDUsageDescription: Kage uses Face ID to unlock your locked browsing session and Vault.
+        NSCameraUsageDescription: Websites you allow can use the camera, for example for video calls.
+        NSMicrophoneUsageDescription: Websites you allow can use the microphone, for example for video calls.
+        NSLocationWhenInUseUsageDescription: Websites you allow can request your location.
+        NSUserActivityTypes: [NSUserActivityTypeBrowsingWeb]
+  KageMacLocal:
+    type: application
+    platform: macOS
+    sources: [Apps/KageMac/Sources]
+    dependencies:
+      - package: AppShell
+    settings:
+      base:
+        PRODUCT_NAME: Kage
+        PRODUCT_BUNDLE_IDENTIFIER: dev.kage.local.$(KAGE_LOCAL_ID).mac
+        CODE_SIGN_ENTITLEMENTS: Apps/KageMac/KageLocal.entitlements
+        ENABLE_HARDENED_RUNTIME: YES
+    info:
+      path: Apps/KageMac/Info-Local.plist
+      properties:
+        CFBundleDisplayName: Kage
+        KageLocalBuild: true
+        LSApplicationCategoryType: public.app-category.productivity
+        NSCameraUsageDescription: Websites you allow can use the camera, for example for video calls.
+        NSMicrophoneUsageDescription: Websites you allow can use the microphone, for example for video calls.
+        NSLocationWhenInUseUsageDescription: Websites you allow can request your location.
+        NSUserActivityTypes: [NSUserActivityTypeBrowsingWeb]
+schemes:
+  KageMacLocal:
+    build:
+      targets:
+        KageMacLocal: all
+    run:
+      config: Debug
+  KageiOSLocal:
+    build:
+      targets:
+        KageiOSLocal: all
+    run:
+      config: Debug

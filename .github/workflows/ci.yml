@@ -52,6 +52,12 @@ jobs:
         run: xcodebuild build -project Kage.xcodeproj -scheme KageiOS -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO -quiet
       - name: Build macOS app (unsigned)
         run: xcodebuild build -project Kage.xcodeproj -scheme KageMac -destination 'generic/platform=macOS' CODE_SIGNING_ALLOWED=NO -quiet
+      - name: Build the local (Personal Team) project
+        # project-local.yml: no tunnel, Encrypted DNS or iCloud, so a free Apple account can sign it.
+        run: |
+          xcodegen generate --spec project-local.yml
+          xcodebuild build -project KageLocal.xcodeproj -scheme KageMacLocal -destination 'generic/platform=macOS' CODE_SIGNING_ALLOWED=NO -quiet
+          xcodebuild build -project KageLocal.xcodeproj -scheme KageiOSLocal -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO -quiet
 
   sdk-survey:
     # K-02: record the real Duo / foldable API surface from the installed SDK.

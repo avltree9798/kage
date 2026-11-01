@@ -1,0 +1,7 @@
+// Settings for project-local.yml (free Personal Team builds).
+// Makes the bundle IDs unique to you: dev.kage.local.<your Mac user name>.mac / .ios
+KAGE_LOCAL_ID = $(USER)
+
+// Optional: put `DEVELOPMENT_TEAM = <your team ID>` in Config/Team.xcconfig (not committed) so the
+// Team survives `xcodegen generate`. Otherwise pick the Team in Signing & Capabilities each time.
+#include? "Team.xcconfig"

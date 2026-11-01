@@ -26,7 +26,11 @@ public final class EncryptedDNSManager {
 
     public init() {}
 
+    /// Personal Team builds (project-local.yml) can't carry the Network Extensions entitlement.
+    public static var isLocalBuild: Bool { Bundle.main.object(forInfoDictionaryKey: "KageLocalBuild") as? Bool == true }
+
     public func refresh() async {
+        if Self.isLocalBuild { status = .unavailable; return }
         #if canImport(NetworkExtension)
         let m = NEDNSSettingsManager.shared()
         do {
@@ -73,7 +77,10 @@ public final class EncryptedDNSManager {
 
     public var explanation: String {
         switch status {
-        case .unavailable: return "Encrypted DNS isn't available on this device."
+        case .unavailable:
+            return Self.isLocalBuild
+                ? "This local build can't use Encrypted DNS or the tunnel: they need a paid Apple Developer account."
+                : "Encrypted DNS isn't available on this device."
         case .notInstalled: return "Hostnames you visit are looked up in the clear unless the tunnel is on."
         case .installedNotEnabled:
             #if os(iOS)
