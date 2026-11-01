@@ -1,5 +1,9 @@
 {
   "version": 1,
-  "note": "Initial Workers AI models are chosen in M4 (ticket K-22) from the live catalogue.",
-  "models": []
+  "defaultModelID": "@cf/meta/llama-3.1-8b-instruct",
+  "models": [
+    { "id": "@cf/meta/llama-3.1-8b-instruct", "name": "Llama 3.1 8B (fast)", "supportsStreaming": true, "maxInputCharacters": 24000 },
+    { "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast", "name": "Llama 3.3 70B (detailed)", "supportsStreaming": true, "maxInputCharacters": 48000 }
+  ],
+  "note": "Mirrors ModelRegistry.builtIn. Re-check model IDs against the live Workers AI catalogue before release."
 }
