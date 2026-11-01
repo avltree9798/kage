@@ -162,6 +162,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: dev.kage.mac.uitests
         TEST_TARGET_NAME: KageMac
         GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: "5.0"
   KageiOSUITests:
     type: bundle.ui-testing
     platform: iOS
@@ -173,6 +174,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: dev.kage.ios.uitests
         TEST_TARGET_NAME: KageiOS
         GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: "5.0"
 schemes:
   KageMac:
     build:
