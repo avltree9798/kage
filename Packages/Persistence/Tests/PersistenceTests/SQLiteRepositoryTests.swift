@@ -42,7 +42,7 @@ import KageModels
         let repo = try KageDatabase.inMemory().history
         try await repo.recordVisit(visit("https://x.test/", title: "Hello world"))
         // FTS operators in user input must not throw.
-        #expect(try await repo.search("hello\" OR NEAR(", limit: 5).count == 1)
+        #expect(try await repo.search("hello\"(*:", limit: 5).count == 1)
         #expect(ftsQuery("  ") == nil)
     }
 
