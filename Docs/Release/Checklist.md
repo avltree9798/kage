@@ -40,6 +40,7 @@ settings) and let automatic signing create the profiles.
 - App Store Review 5.4: VPN apps must be submitted by an organisation account (not an individual), must use
   NEVPNManager / Network Extension (Kage does), and the listing must say what's collected (nothing).
 - No Apple request form is needed for `packet-tunnel-provider` any more; ticking Network Extensions is enough.
+- The apps also use `dns-settings` (Encrypted DNS, threat model T-13). It comes with the same Network Extensions capability.
 - Build Macs need Go (`brew install go`) for the WireGuard bridge.
 
 ## 5. Tracker ruleset (K-21)

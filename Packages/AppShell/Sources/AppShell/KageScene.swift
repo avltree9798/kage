@@ -10,6 +10,8 @@ extension AppEnvironment {
     /// database and no Keychain access, so tests never touch the user's real data. `KAGE_UITEST_TABS=N` (environment) opens N
     /// tabs of `KAGE_UITEST_URL` (default https://example.com/) for the 100-tab memory test.
     static func forLaunch(_ process: ProcessInfo = .processInfo) -> AppEnvironment {
+        // Before any secret is loaded: no debugger attach (release builds) and no core files (threat model T-12).
+        ProcessHardening.apply()
         guard process.arguments.contains("-KageUITesting") else { return AppEnvironment() }
         let suite = "dev.kage.uitests"
         let defaults = UserDefaults(suiteName: suite) ?? .standard
@@ -17,7 +19,8 @@ extension AppEnvironment {
         let settings = AppSettings(defaults: defaults)
         settings.onboardingComplete = true
         settings.homepage = "about:blank"
-        let env = AppEnvironment(settings: settings, database: try? KageDatabase.inMemory(), credentials: InMemoryCredentialStore())
+        let env = AppEnvironment(settings: settings, database: try? KageDatabase.inMemory(), credentials: InMemoryCredentialStore(),
+                                 vaultKey: InMemoryVaultKey())
         // An environment variable, not an argument: a bare "100" in argv reads as a file to open on macOS,
         // and SwiftUI then skips the default window.
         if let n = process.environment["KAGE_UITEST_TABS"].flatMap(Int.init) {

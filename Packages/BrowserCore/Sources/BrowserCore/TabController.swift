@@ -103,6 +103,21 @@ public final class TabController: NSObject {
         webView = nil
     }
 
+    /// Lock purge (threat model T-11): releases the WebView at once, with no snapshot, and drops any
+    /// snapshot already taken. With `keepState: false` the back/forward archive goes too.
+    func purge(keepState: Bool) {
+        if let wv = webView {
+            if keepState { savedInteractionState = wv.interactionState as? Data }
+            observations.removeAll()
+            wv.stopLoading()
+            wv.navigationDelegate = nil
+            wv.uiDelegate = nil
+            webView = nil
+        }
+        if !keepState { savedInteractionState = nil }
+        snapshot = nil
+    }
+
     public var snapshotImage: PlatformImage? { snapshot }
 
     func persistentState() -> Data? {

@@ -19,6 +19,8 @@ public final class AppSettings {
     public var blockingExceptions: [String] { didSet { defaults.set(blockingExceptions, forKey: "blockingExceptions") } }
     public var lockMode: LockPolicy { didSet { defaults.set(lockMode.rawValue, forKey: "lockMode") } }
     public var lockOnBackground: Bool { didSet { defaults.set(lockOnBackground, forKey: "lockOnBackground") } }
+    /// Hide pages from screen recording, mirroring and AirPlay in every profile, not only Private and Vault.
+    public var hideFromScreenCapture: Bool { didSet { defaults.set(hideFromScreenCapture, forKey: "hideFromScreenCapture") } }
     public var lockOnInactivity: Bool { didSet { defaults.set(lockOnInactivity, forKey: "lockOnInactivity") } }
     public var inactivityMinutes: Int { didSet { defaults.set(inactivityMinutes, forKey: "inactivityMinutes") } }
     public var smartPreSummary: Bool { didSet { defaults.set(smartPreSummary, forKey: "smartPreSummary") } }
@@ -43,6 +45,7 @@ public final class AppSettings {
         lockMode = LockPolicy(rawValue: defaults.string(forKey: "lockMode") ?? "") ?? .none
         lockOnBackground = defaults.object(forKey: "lockOnBackground") as? Bool ?? true
         lockOnInactivity = defaults.bool(forKey: "lockOnInactivity")
+        hideFromScreenCapture = defaults.bool(forKey: "hideFromScreenCapture")
         inactivityMinutes = defaults.object(forKey: "inactivityMinutes") as? Int ?? 5
         smartPreSummary = defaults.bool(forKey: "smartPreSummary")   // default off (spec 8.4)
         aiModelID = defaults.string(forKey: "aiModelID")

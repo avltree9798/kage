@@ -32,6 +32,11 @@ public final class SessionLockCoordinator {
     @ObservationIgnored private let authenticator: Authenticating
     @ObservationIgnored private let cleanup: @Sendable (LockPolicy) async -> String?
     @ObservationIgnored private var inactivityTask: Task<Void, Never>?
+    /// Runs synchronously right after concealment, on every lock: the app shell releases web content,
+    /// snapshots, caches and the Vault key here (threat model T-11).
+    @ObservationIgnored public var onLock: (@MainActor () -> Void)?
+    /// Runs after a successful unlock.
+    @ObservationIgnored public var onUnlock: (@MainActor () -> Void)?
 
     public init(mode: LockPolicy = .none, triggers: LockTriggers = [.appBackground, .manual],
                 inactivityTimeout: Duration = .seconds(300), authenticator: Authenticating,
@@ -47,6 +52,7 @@ public final class SessionLockCoordinator {
         isConcealed = true
         isLocked = true
         inactivityTask?.cancel()
+        onLock?()
         let mode = self.mode
         guard mode == .lockAndForget || mode == .lockAndDestroyTemporary else { return nil }
         isCleaning = true
@@ -64,6 +70,7 @@ public final class SessionLockCoordinator {
             isLocked = false
             isConcealed = false
             noteActivity()
+            onUnlock?()
         }
         return ok
     }

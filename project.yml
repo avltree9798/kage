@@ -18,6 +18,8 @@ packages:
     path: Packages/AppShell
   NetworkTunnel:
     path: Packages/NetworkTunnel
+  SecurityKit:
+    path: Packages/SecurityKit
   WireGuardKit:
     path: Vendor/WireGuardKit
 targets:
@@ -90,6 +92,7 @@ targets:
       - target: WireGuardGoBridgeiOS
       - package: WireGuardKit
       - package: NetworkTunnel
+      - package: SecurityKit
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.kage.ios.tunnel
@@ -112,6 +115,7 @@ targets:
       - target: WireGuardGoBridgemacOS
       - package: WireGuardKit
       - package: NetworkTunnel
+      - package: SecurityKit
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.kage.mac.tunnel

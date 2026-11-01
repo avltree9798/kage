@@ -67,12 +67,12 @@ struct HistoryList: View {
                 .buttonStyle(.plain)
                 .contextMenu {
                     Button("Show only \(v.url.kageHost)") { domain = v.url.kageHost }
-                    Button("Delete", role: .destructive) { Task { try? await env.database.history.delete(ids: [v.id]); await load() } }
+                    Button("Delete", role: .destructive) { Task { try? await env.currentHistory.delete(ids: [v.id]); await load() } }
                 }
             }
             .onDelete { idx in
                 let ids = idx.map { visits[$0].id }
-                Task { try? await env.database.history.delete(ids: ids); await load() }
+                Task { try? await env.currentHistory.delete(ids: ids); await load() }
             }
             Text("This is Kage's own history. Websites and WebKit caches are managed separately in Privacy.")
                 .font(.footnote).foregroundStyle(.secondary)
@@ -82,9 +82,9 @@ struct HistoryList: View {
     }
 
     private func load() async {
-        if let domain { visits = (try? await env.database.history.visits(host: domain, limit: 500)) ?? [] }
-        else if query.isEmpty { visits = (try? await env.database.history.visits(host: nil, limit: 500)) ?? [] }
-        else { visits = (try? await env.database.history.search(query, limit: 200)) ?? [] }
+        if let domain { visits = (try? await env.currentHistory.visits(host: domain, limit: 500)) ?? [] }
+        else if query.isEmpty { visits = (try? await env.currentHistory.visits(host: nil, limit: 500)) ?? [] }
+        else { visits = (try? await env.currentHistory.search(query, limit: 200)) ?? [] }
     }
 }
 

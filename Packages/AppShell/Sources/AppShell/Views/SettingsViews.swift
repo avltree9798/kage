@@ -62,6 +62,7 @@ struct SettingsView: View {
                     Text("Lock and close temporary session").tag(LockPolicy.lockAndDestroyTemporary)
                 }
                 .onChange(of: s.lockMode) { _, _ in env.applyLockSettings() }
+                Toggle("Always hide Kage from screen capture", isOn: $s.hideFromScreenCapture)
                 if s.lockMode != .none {
                     Toggle("Lock when Kage goes to the background", isOn: $s.lockOnBackground)
                         .onChange(of: s.lockOnBackground) { _, _ in env.applyLockSettings() }

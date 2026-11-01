@@ -235,7 +235,23 @@ struct NetworkProtectionView: View {
                 }
                 if let note = network.traceNote { Text(note).font(.footnote) }
             }
+            Section {
+                switch env.dns.status {
+                case .notInstalled, .failed:
+                    Button("Use Encrypted DNS") { Task { await env.dns.install() } }
+                case .installedNotEnabled, .active:
+                    Button("Check Again") { Task { await env.dns.refresh() } }
+                    Button("Remove Encrypted DNS", role: .destructive) { Task { await env.dns.remove() } }
+                case .unavailable:
+                    EmptyView()
+                }
+            } header: {
+                Text("Encrypted DNS")
+            } footer: {
+                Text(env.dns.explanation + " The sites themselves still see your IP address unless the tunnel is on.")
+            }
         }
+        .task { await env.dns.refresh() }
         .navigationTitle("Network Protection")
         .fileImporter(isPresented: $importing, allowedContentTypes: [.data, .plainText]) { result in
             guard case .success(let url) = result else { return }

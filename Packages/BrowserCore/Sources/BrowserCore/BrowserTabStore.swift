@@ -54,9 +54,32 @@ public final class BrowserTabStore {
 
     public func persist() async {
         guard let repo = tabRepository else { return }
-        let models = tabs.enumerated().map { i, t in model(for: t, sortOrder: i) }
-        try? await repo.save(models)
+        try? await repo.save(models())
         try? await repo.saveGroups(groups)
+    }
+
+    /// The tab list as it would be saved now.
+    public func models() -> [BrowserTab] { tabs.enumerated().map { i, t in model(for: t, sortOrder: i) } }
+
+    // MARK: Lock purge (threat model T-11)
+
+    /// Releases every WebView at once, so WebKit ends their content processes, and drops page snapshots.
+    /// The tab list stays, and the active tab reloads when Kage is unlocked.
+    public func purgeLiveContent() {
+        for t in tabs { t.purge(keepState: true) }
+    }
+
+    /// Drops the tabs from memory entirely, back/forward state included. The Vault does this on lock;
+    /// its tabs come back from the sealed store after the next unlock.
+    public func unload() {
+        for t in tabs { t.purge(keepState: false) }
+        tabs.removeAll(); groups.removeAll(); activeTabID = nil; recentlyClosed.removeAll()
+        lastActive.removeAll(); createdAt.removeAll(); pinned.removeAll(); groupMembership.removeAll()
+    }
+
+    /// After unlock: brings the active tab's page back.
+    public func resumeAfterUnlock() async {
+        if let id = activeTabID { await activate(id) }
     }
 
     func model(for t: TabController, sortOrder: Int) -> BrowserTab {

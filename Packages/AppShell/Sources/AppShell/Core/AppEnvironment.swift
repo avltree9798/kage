@@ -38,16 +38,35 @@ public final class AppEnvironment {
     public private(set) var lastCleanup: CleanupLogEntry?
     public private(set) var aiStatus: TokenStatus = .notConfigured
     public var isContextVisible = true
-    public var vaultUnlocked = false
+    /// Mirrors the Vault key gate for the UI. The real gate is `vaultKey`: without the key nothing in the
+    /// Vault store can be read, whatever this flag says (threat model T-10).
+    public private(set) var vaultUnlocked = false
+    /// iOS: true while the screen is being recorded, mirrored or sent over AirPlay.
+    public internal(set) var screenIsCaptured = false
+    @ObservationIgnored public let vaultKey: any VaultKeyProviding
+    @ObservationIgnored public let vault: VaultSealedStore
+    @ObservationIgnored public let vaultHistory: VaultHistoryRepository
+    @ObservationIgnored public let vaultTabs: VaultTabRepository
+    public let dns = EncryptedDNSManager()
     /// UI-test only (see `forLaunch`): tabs to open at start.
     @ObservationIgnored var uiTestTabCount = 0
     @ObservationIgnored var uiTestURL: URL?
 
     public init(settings: AppSettings = AppSettings(), database: KageDatabase? = nil,
-                credentials: CredentialStoring? = nil, capabilities: DeviceCapabilityProviding = DuoCapabilityAdapter()) {
+                credentials: CredentialStoring? = nil, capabilities: DeviceCapabilityProviding = DuoCapabilityAdapter(),
+                vaultKey: (any VaultKeyProviding)? = nil) {
         self.settings = settings
         let db = database ?? ((try? KageDatabase(store: SQLiteStore.openDefault())) ?? (try! KageDatabase.inMemory()))
         self.database = db
+        let key = vaultKey ?? SecureEnclaveVaultKey()
+        self.vaultKey = key
+        let keySource: VaultKeySource = { try await key.key() }
+        // An injected database means tests or UI tests: keep the Vault in memory too.
+        let sealed = database == nil ? ((try? VaultSealedStore.openDefault(key: keySource)) ?? (try! VaultSealedStore.inMemory(key: keySource)))
+                                     : try! VaultSealedStore.inMemory(key: keySource)
+        vault = sealed
+        vaultHistory = VaultHistoryRepository(vault: sealed)
+        vaultTabs = VaultTabRepository(vault: sealed)
         self.capabilities = capabilities
         let creds = credentials ?? KeychainCredentialStore()
         self.credentials = creds
@@ -86,6 +105,11 @@ public final class AppEnvironment {
         context.smartPreSummaryEnabled = settings.smartPreSummary
         context.pages = self
         applyLockSettings()
+        lock.onLock = { [weak self] in self?.purgeForLock() }
+        lock.onUnlock = { [weak self] in
+            guard let self else { return }
+            Task { await self.currentStore.resumeAfterUnlock() }
+        }
         downloads.resumeHost = { [weak self] in self?.currentStore.activeTab?.webView }
     }
 
@@ -104,6 +128,7 @@ public final class AppEnvironment {
 
     public func start() async {
         await network.start()
+        await dns.refresh()
         try? await contentBlocking.update(mode: settings.blockingMode, exceptions: Set(settings.blockingExceptions))
         await refreshProtectedSites()
         await applyRetentionOverride()
@@ -156,8 +181,10 @@ public final class AppEnvironment {
     public func store(for kind: PrivacyProfile.Kind) -> BrowserTabStore {
         if let s = stores[kind] { return s }
         let profile = PrivacyProfile.builtIn.first { $0.kind == kind } ?? .standard
+        let isVault = kind == .vault
         let s = BrowserTabStore(profile: profile, factory: factory, downloads: downloads, permissions: permissions,
-                                tabRepository: database.tabs, history: database.history, policy: policy)
+                                tabRepository: isVault ? vaultTabs : database.tabs,
+                                history: isVault ? vaultHistory : database.history, policy: policy)
         s.presenter = prompts
         s.searchEngine = settings.searchEngine
         s.homeURL = homeURL
@@ -173,8 +200,9 @@ public final class AppEnvironment {
     /// Switching profile. Vault asks for authentication first; leaving Private discards its session.
     public func switchProfile(to kind: PrivacyProfile.Kind) async {
         guard kind != currentKind else { return }
-        if kind == .vault && !vaultUnlocked {
-            guard (try? await BiometricAuthenticator().authenticate(reason: "Open your Vault")) == true else { return }
+        if kind == .vault {
+            // The Secure Enclave releases the key only after Face ID, Touch ID or the passcode.
+            guard (try? await vaultKey.unlock(reason: "Open your Vault")) != nil else { return }
             vaultUnlocked = true
         }
         let leaving = currentKind
@@ -183,7 +211,48 @@ public final class AppEnvironment {
         if s.tabs.isEmpty { await s.restore() }
         if s.tabs.isEmpty { s.open(homeURL) }
         if leaving == .private { _ = await endPrivateSession() }
+        if leaving == .vault { lockVault() }
     }
+
+    /// History for the Library: the Vault's sealed history while in the Vault, the main one otherwise.
+    public var currentHistory: any HistoryRepository { currentKind == .vault ? vaultHistory : database.history }
+
+    // MARK: Lock purge (threat model T-11)
+
+    /// Runs synchronously on every lock, right after the content is concealed.
+    func purgeForLock() {
+        for s in stores.values { s.purgeLiveContent() }
+        lockVault()
+        context.clear()
+        URLCache.shared.removeAllCachedResponses()
+    }
+
+    /// Takes the Vault's tabs out of memory, saves them sealed, forgets the key and empties the Vault's
+    /// WebKit caches. Called on lock, on leaving the Vault and when Kage goes to the background.
+    public func lockVault() {
+        if let s = stores[.vault] {
+            let models = s.models()
+            s.unload()
+            stores[.vault] = nil
+            if currentKind == .vault {
+                currentKind = .standard
+                let standard = store(for: .standard)
+                if standard.tabs.isEmpty { Task { await standard.restore(); if standard.tabs.isEmpty { standard.open(homeURL) } } }
+            }
+            let tabs = vaultTabs
+            Task { try? await tabs.save(models) ; await self.forgetVaultKey() }
+        } else {
+            Task { await forgetVaultKey() }
+        }
+        vaultUnlocked = false
+        if let vaultProfile = PrivacyProfile.builtIn.first(where: { $0.kind == .vault }) {
+            factory.dataStores.store(for: vaultProfile).removeData(
+                ofTypes: [WKWebsiteDataTypeDiskCache, WKWebsiteDataTypeMemoryCache, WKWebsiteDataTypeFetchCache],
+                modifiedSince: .distantPast) {}
+        }
+    }
+
+    private func forgetVaultKey() async { await vaultKey.lock() }
 
     /// AT06: closing the private session drops its tabs and its in-memory WebKit store.
     @discardableResult

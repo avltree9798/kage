@@ -145,6 +145,19 @@ actor FakeWebKit: WebsiteDataStoreAdapting {
         #expect(c.isLocked)
     }
 
+    // Threat model T-11: the purge hook runs synchronously on lock, after concealment; unlock resumes.
+    @Test func lockRunsPurgeHookAfterConcealing() async {
+        let c = SessionLockCoordinator(mode: .lockOnly, authenticator: StubAuthenticator(result: true))
+        @MainActor final class Flags { var concealedAtPurge = false; var resumed = false }
+        let flags = Flags()
+        c.onLock = { [weak c] in flags.concealedAtPurge = c?.isConcealed ?? false }
+        c.onUnlock = { flags.resumed = true }
+        c.lock()
+        #expect(flags.concealedAtPurge)
+        #expect(await c.unlock())
+        #expect(flags.resumed)
+    }
+
     @Test func disabledLockDoesNothing() {
         let c = SessionLockCoordinator(mode: .none, authenticator: StubAuthenticator(result: true))
         c.lock()

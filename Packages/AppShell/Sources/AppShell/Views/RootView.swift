@@ -39,6 +39,7 @@ public struct RootView: View {
             }
         }
         #endif
+        .modifier(CaptureShield())
         .overlay { if env.lock.isConcealed { LockOverlayView() } }
         .modifier(PromptHost())
         .sheet(isPresented: $showContextSheet) { ContextPanel().environment(env).presentationDetents([.medium, .large]) }
@@ -64,6 +65,8 @@ public struct RootView: View {
             case .background:
                 env.lock.sceneDidEnterBackground()
                 Task { await env.currentStore.persist(); await env.runCleanup(.background) }
+                // The Vault never stays open in the background, whatever the lock setting (threat model T-11).
+                env.lockVault()
             case .active:
                 env.lock.sceneDidBecomeActive()
                 Task { await env.runCleanup(.foreground) }

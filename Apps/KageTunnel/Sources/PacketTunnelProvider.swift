@@ -2,6 +2,7 @@ import Foundation
 import NetworkExtension
 import NetworkTunnel
 import WireGuardKit
+import SecurityKit
 import os
 
 /// Kage's WireGuard packet tunnel (ADR-008 rev. 2). It reads the wg-quick text from the shared Keychain
@@ -18,6 +19,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     enum TunnelError: Error { case noConfiguration, invalidConfiguration }
 
     override func startTunnel(options: [String: NSObject]?, completionHandler: @escaping (Error?) -> Void) {
+        // The extension holds the WireGuard private key: no debugger attach, no core files (threat model T-12).
+        ProcessHardening.apply()
         guard let proto = protocolConfiguration as? NETunnelProviderProtocol,
               let ref = proto.passwordReference,
               let text = TunnelKeychain.load(persistentReference: ref) else {
