@@ -22,8 +22,8 @@ import Testing
 @Suite struct CloudflareRequestTests {
     @Test func requestCarriesNoCookiesAndUsesBearerToken() throws {
         let req = try CloudflareRequestBuilder.runRequest(accountID: "acct", token: "tok",
-            modelID: "@cf/meta/llama-3.1-8b-instruct", messages: [("user", "hi")], stream: false)
-        #expect(req.url?.absoluteString == "https://api.cloudflare.com/client/v4/accounts/acct/ai/run/@cf/meta/llama-3.1-8b-instruct")
+            modelID: "@cf/zai-org/glm-4.7-flash", messages: [("user", "hi")], stream: false)
+        #expect(req.url?.absoluteString == "https://api.cloudflare.com/client/v4/accounts/acct/ai/run/@cf/zai-org/glm-4.7-flash")
         #expect(req.httpShouldHandleCookies == false)
         #expect(req.value(forHTTPHeaderField: "Authorization") == "Bearer tok")
         #expect(req.value(forHTTPHeaderField: "Cookie") == nil)

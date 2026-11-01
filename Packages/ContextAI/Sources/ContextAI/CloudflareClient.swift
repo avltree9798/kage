@@ -18,12 +18,22 @@ public struct ModelRegistry: Codable, Sendable {
     public var defaultModelID: String
     public var models: [AIModel]
 
-    /// Built-in defaults; `Config/Models.json` mirrors these. Model IDs must be re-checked against
-    /// the live Workers AI catalogue before release (spec 24 Q5).
-    public static let builtIn = ModelRegistry(version: 1, defaultModelID: "@cf/meta/llama-3.1-8b-instruct", models: [
-        AIModel(id: "@cf/meta/llama-3.1-8b-instruct", name: "Llama 3.1 8B (fast)", supportsStreaming: true, maxInputCharacters: 24_000),
+    /// Built-in defaults; `Config/Models.json` mirrors these. Checked against Cloudflare's catalogue on
+    /// 2026-11-01: `@cf/meta/llama-3.1-8b-instruct` was retired on 2026-05-30, and Cloudflare lists
+    /// GLM 4.7 Flash and Gemma 4 as replacements. `CloudflareAIClient.unavailableModels` re-checks the
+    /// IDs against the user's own account at runtime (spec 24 Q5).
+    public static let builtIn = ModelRegistry(version: 2, defaultModelID: "@cf/zai-org/glm-4.7-flash", models: [
+        AIModel(id: "@cf/zai-org/glm-4.7-flash", name: "GLM 4.7 Flash (fast)", supportsStreaming: true, maxInputCharacters: 96_000),
+        AIModel(id: "@cf/google/gemma-4-26b-a4b-it", name: "Gemma 4 26B", supportsStreaming: true, maxInputCharacters: 64_000),
         AIModel(id: "@cf/meta/llama-3.3-70b-instruct-fp8-fast", name: "Llama 3.3 70B (detailed)", supportsStreaming: true, maxInputCharacters: 48_000),
     ])
+
+    /// Models that have been retired upstream. A saved choice that names one falls back to the default.
+    public static let retiredModelIDs: Set<String> = [
+        "@cf/meta/llama-3.1-8b-instruct", "@cf/meta/llama-3.1-8b-instruct-awq", "@cf/meta/llama-3.1-70b-instruct",
+        "@cf/meta/llama-3-8b-instruct", "@cf/meta/llama-3-8b-instruct-awq", "@cf/mistral/mistral-7b-instruct-v0.1",
+        "@cf/google/gemma-3-12b-it",
+    ]
 
     public static func load(from url: URL) -> ModelRegistry? {
         guard let data = try? Data(contentsOf: url) else { return nil }
@@ -31,7 +41,8 @@ public struct ModelRegistry: Codable, Sendable {
     }
 
     public func model(_ id: String?) -> AIModel {
-        models.first { $0.id == id } ?? models.first { $0.id == defaultModelID } ?? models[0]
+        let id = id.flatMap { Self.retiredModelIDs.contains($0) ? nil : $0 }
+        return models.first { $0.id == id } ?? models.first { $0.id == defaultModelID } ?? models[0]
     }
 }
 
@@ -163,12 +174,45 @@ public struct CloudflareAIClient: AIInferenceClient {
     }
 
     /// Non-streaming shape: `{"result":{"response":"..."},"success":true}`.
+    /// Newer chat models (GLM 4.7, Gemma 4) answer in the OpenAI shape, `choices[0].message.content`,
+    /// either inside `result` or at the top level.
     static func decodeResponse(_ data: Data) throws -> String {
         guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw AIError.malformedResponse }
-        if let result = obj["result"] as? [String: Any], let text = result["response"] as? String { return text }
-        if let choices = obj["choices"] as? [[String: Any]], let msg = choices.first?["message"] as? [String: Any],
-           let text = msg["content"] as? String { return text }
+        for container in [obj["result"] as? [String: Any], obj].compactMap({ $0 }) {
+            if let text = container["response"] as? String { return text }
+            if let choices = container["choices"] as? [[String: Any]], let msg = choices.first?["message"] as? [String: Any],
+               let text = msg["content"] as? String { return text }
+        }
         throw AIError.malformedResponse
+    }
+
+    /// Asks the account's Workers AI catalogue which of `ids` it does not offer. Uses
+    /// `GET /accounts/{id}/ai/models/search?search=<name>`; needs the token's Workers AI Read permission.
+    /// Returns an empty set when every model is listed.
+    public func unavailableModels(_ ids: [String]) async throws -> Set<String> {
+        guard let cred = try await credentials.load() else { throw AIError.notConfigured }
+        var allowed = CharacterSet.urlPathAllowed
+        allowed.remove(charactersIn: "/")
+        guard let acct = cred.accountID.addingPercentEncoding(withAllowedCharacters: allowed) else { throw AIError.invalidToken }
+        var missing = Set<String>()
+        for id in ids {
+            var comps = URLComponents(string: "https://api.cloudflare.com/client/v4/accounts/\(acct)/ai/models/search")!
+            comps.queryItems = [URLQueryItem(name: "search", value: id.split(separator: "/").last.map(String.init) ?? id)]
+            guard let url = comps.url else { continue }
+            var req = URLRequest(url: url)
+            req.httpShouldHandleCookies = false
+            req.setValue("Bearer \(cred.apiToken)", forHTTPHeaderField: "Authorization")
+            let (data, response) = try await session.data(for: req)
+            try Self.check(response, body: data)
+            if !Self.catalogue(data, contains: id) { missing.insert(id) }
+        }
+        return missing
+    }
+
+    static func catalogue(_ data: Data, contains id: String) -> Bool {
+        guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let result = obj["result"] as? [[String: Any]] else { return false }
+        return result.contains { ($0["name"] as? String) == id }
     }
 }
 

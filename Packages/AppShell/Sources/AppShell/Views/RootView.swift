@@ -12,6 +12,8 @@ public struct RootView: View {
     @State private var contextFraction: Double = KageTokens.canvasFraction
     @State private var showContextSheet = false
     @State private var destination: Destination?
+    /// Last hinge status from `onHingeChange` (iOS 27.1+); `nil` on devices without a fold.
+    @State private var hinge: HingeStatus?
 
     enum Destination: String, Identifiable { case library, privacy, settings; var id: String { rawValue } }
 
@@ -19,7 +21,8 @@ public struct RootView: View {
 
     public var body: some View {
         GeometryReader { proxy in
-            let geometry = LayoutGeometry(width: proxy.size.width, height: proxy.size.height)
+            let geometry = DuoSignals.geometry(width: proxy.size.width, height: proxy.size.height,
+                                               hinge: hinge, regions: Self.reservedRegions(proxy))
             let mode = LayoutResolver.mode(for: geometry)
             content(mode: mode, geometry: geometry)
                 .onChange(of: mode) { _, new in
@@ -27,6 +30,15 @@ public struct RootView: View {
                     if !new.showsContextAlongside && env.isContextVisible { showContextSheet = false }
                 }
         }
+        #if os(iOS)
+        .onHingeChange { _, context in
+            hinge = context.hinge.map { h in
+                if h.status == .closed { return .closed }
+                if h.status == .partiallyOpen { return .partiallyOpen }
+                return .fullyOpen
+            }
+        }
+        #endif
         .overlay { if env.lock.isConcealed { LockOverlayView() } }
         .modifier(PromptHost())
         .sheet(isPresented: $showContextSheet) { ContextPanel().environment(env).presentationDetents([.medium, .large]) }
@@ -71,13 +83,23 @@ public struct RootView: View {
                 compactBar
             case .wide, .duo:
                 if env.isContextVisible, let split = LayoutResolver.split(for: geometry, fraction: contextFraction) {
-                    HStack(spacing: 0) {
-                        CanvasView().frame(width: split.canvas.upperBound - split.canvas.lowerBound)
-                        divider(total: geometry.width)
-                        // Leave the hinge region empty so no control sits under it (spec 7.3).
-                        if split.context.lowerBound > split.canvas.upperBound {
-                            Color.clear.frame(width: split.context.lowerBound - split.canvas.upperBound)
+                    let gap = split.context.lowerBound - split.canvas.upperBound
+                    let canvasLength = split.canvas.upperBound - split.canvas.lowerBound
+                    if split.axis == .horizontal {
+                        HStack(spacing: 0) {
+                            CanvasView().frame(width: canvasLength)
+                            // With a fold the split snaps to it, so there's nothing to drag; the fold is left empty
+                            // so no control sits under it (spec 7.3).
+                            if gap > 0 || geometry.hingeOcclusion != nil {
+                                Color.clear.frame(width: max(gap, 0)).accessibilityHidden(true)
+                            } else {
+                                divider(total: geometry.width)
+                            }
+                            ContextPanel()
                         }
+                    } else {
+                        CanvasView().frame(height: canvasLength)
+                        if gap > 0 { Color.clear.frame(height: gap).accessibilityHidden(true) } else { Divider() }
                         ContextPanel()
                     }
                 } else {
@@ -86,14 +108,30 @@ public struct RootView: View {
                 destinationBar
             case .deskLike:
                 if let split = LayoutResolver.split(for: geometry, fraction: 0.5) {
+                    let gap = split.context.lowerBound - split.canvas.upperBound
                     CanvasView().frame(height: split.canvas.upperBound - split.canvas.lowerBound)
-                    Divider()
+                    if gap > 0 { Color.clear.frame(height: gap).accessibilityHidden(true) } else { Divider() }
                     ContextPanel()
                 } else {
                     CanvasView()
                 }
             }
         }
+    }
+
+    /// Active fold regions in this view's space (iOS 27.1+ `GeometryProxy.reservedRegions`).
+    static func reservedRegions(_ proxy: GeometryProxy) -> [ReservedRegionReading] {
+        #if os(iOS)
+        let pairs: [(ReservedRegion.Kind, ReservedRegionReading.Kind)] = [(.division, .division), (.occlusion, .occlusion)]
+        return pairs.flatMap { kind, mapped in
+            proxy.reservedRegions(kind: kind).map { r in
+                ReservedRegionReading(kind: mapped, x: r.frame.minX, y: r.frame.minY,
+                                      width: r.frame.width, height: r.frame.height, isActive: r.isActive)
+            }
+        }
+        #else
+        return []
+        #endif
     }
 
     private func divider(total: Double) -> some View {

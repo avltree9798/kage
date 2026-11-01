@@ -43,28 +43,85 @@ public struct PaneSplit: Sendable, Equatable {
     public var context: ClosedRange<Double>
 }
 
-/// iPhone Duo support is required (ADR-011). Hinge and posture signals plug in through this protocol
-/// once the iOS 27.2 SDK APIs are confirmed (ticket K-02). Until a signal source reports values,
-/// layout falls back to geometry alone, which ADR-007 keeps as the baseline.
+/// iPhone Duo support is required (ADR-011). The iOS 27.1+ SDK reports the fold through two public APIs,
+/// confirmed against the iOS 27.2 SDK on 2026-11-01 (ticket K-02):
+/// - `View.onHingeChange(isEnabled:_:)` delivers `DeviceHingeContext.hinge: DeviceHinge?`
+///   (`status` is `.closed`, `.partiallyOpen` or `.fullyOpen`; `angle` is an `Angle`; `nil` means no hinge).
+/// - `GeometryProxy.reservedRegions(kind:options:layoutDirectionBehavior:)` returns `ReservedRegion`s of kind
+///   `.division` (where the screen is split by the fold) or `.occlusion` (where content is hidden), with
+///   `frame`, `margins` and `isActive`.
+/// The SwiftUI layer reads those and passes plain values here, so layout logic stays testable everywhere.
 public protocol DeviceCapabilityProviding: Sendable {
     var supportsHingeObservation: Bool { get }
     var supportsSecondaryDisplayScene: Bool { get }
 }
 
-/// A source of hinge and posture readings. Implementations must use public APIs only (spec 7.3).
-public protocol HingeSignalSource: Sendable {
-    var isAvailable: Bool { get }
-    func currentReading() async -> (posture: DuoPosture, occlusion: ClosedRange<Double>?, orientation: HingeOrientation)?
+/// Plain mirror of `DeviceHinge.Status`.
+public enum HingeStatus: Sendable, Equatable { case closed, partiallyOpen, fullyOpen }
+
+/// Plain mirror of an active `ReservedRegion` frame, in the root view's coordinate space.
+public struct ReservedRegionReading: Sendable, Equatable {
+    public enum Kind: Sendable, Equatable { case division, occlusion }
+    public var kind: Kind
+    public var x: Double, y: Double, width: Double, height: Double
+    public var isActive: Bool
+    public init(kind: Kind, x: Double, y: Double, width: Double, height: Double, isActive: Bool = true) {
+        self.kind = kind; self.x = x; self.y = y; self.width = width; self.height = height; self.isActive = isActive
+    }
 }
 
-/// Default capability provider: geometry-based, with no hinge signal until one is registered.
-public struct DuoCapabilityAdapter: DeviceCapabilityProviding {
-    public let hinge: HingeSignalSource?
-    public let secondaryDisplay: Bool
-    public init(hinge: HingeSignalSource? = nil, secondaryDisplay: Bool = false) {
-        self.hinge = hinge; self.secondaryDisplay = secondaryDisplay
+public enum DuoSignals {
+    public static func posture(for status: HingeStatus?) -> DuoPosture? {
+        switch status {
+        case nil: nil
+        case .closed: .closed
+        case .partiallyOpen: .partiallyFolded
+        case .fullyOpen: .flat
+        }
     }
-    public var supportsHingeObservation: Bool { hinge?.isAvailable ?? false }
+
+    /// Builds layout geometry from the hinge status and the reserved regions SwiftUI reports. The fold's
+    /// orientation comes from the region's shape: a tall strip is a vertical hinge (panes side by side),
+    /// a wide strip is a horizontal hinge (panes stacked). Occlusion wins over division, because content
+    /// under an occluded strip can't be seen at all. Inactive regions (e.g. the fold while closed) are ignored.
+    public static func geometry(width: Double, height: Double, hinge: HingeStatus?,
+                                regions: [ReservedRegionReading]) -> LayoutGeometry {
+        let active = regions.filter { $0.isActive && $0.width >= 0 && $0.height >= 0 }
+        let region = active.first { $0.kind == .occlusion } ?? active.first { $0.kind == .division }
+        var g = LayoutGeometry(width: width, height: height, posture: posture(for: hinge))
+        guard let r = region else {
+            // A hinge without a reported region (e.g. folded shut, or a single-panel window) has no split.
+            if g.posture != nil, g.posture != .closed { g.hingeOrientation = width >= height ? .vertical : .horizontal }
+            return g
+        }
+        if r.height >= r.width {
+            g.hingeOrientation = .vertical
+            g.hingeOcclusion = r.x...(r.x + r.width)
+        } else {
+            g.hingeOrientation = .horizontal
+            g.hingeOcclusion = r.y...(r.y + r.height)
+        }
+        // A reported division without hinge status still means two panels (e.g. an external display mirror).
+        if g.posture == nil { g.posture = .flat }
+        return g
+    }
+}
+
+/// Capability provider. On iOS the hinge API exists on every device from iOS 27.1, and reports `nil`
+/// on phones without a fold; `hingeObserved` flips once SwiftUI delivers a non-nil hinge.
+public struct DuoCapabilityAdapter: DeviceCapabilityProviding {
+    public let hingeObserved: Bool
+    public let secondaryDisplay: Bool
+    public init(hingeObserved: Bool = false, secondaryDisplay: Bool = false) {
+        self.hingeObserved = hingeObserved; self.secondaryDisplay = secondaryDisplay
+    }
+    public var supportsHingeObservation: Bool {
+        #if os(iOS)
+        true
+        #else
+        false
+        #endif
+    }
     public var supportsSecondaryDisplayScene: Bool { secondaryDisplay }
 }
 

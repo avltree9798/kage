@@ -1,9 +1,10 @@
 {
-  "version": 1,
-  "defaultModelID": "@cf/meta/llama-3.1-8b-instruct",
+  "version": 2,
+  "defaultModelID": "@cf/zai-org/glm-4.7-flash",
   "models": [
-    { "id": "@cf/meta/llama-3.1-8b-instruct", "name": "Llama 3.1 8B (fast)", "supportsStreaming": true, "maxInputCharacters": 24000 },
+    { "id": "@cf/zai-org/glm-4.7-flash", "name": "GLM 4.7 Flash (fast)", "supportsStreaming": true, "maxInputCharacters": 96000 },
+    { "id": "@cf/google/gemma-4-26b-a4b-it", "name": "Gemma 4 26B", "supportsStreaming": true, "maxInputCharacters": 64000 },
     { "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast", "name": "Llama 3.3 70B (detailed)", "supportsStreaming": true, "maxInputCharacters": 48000 }
   ],
-  "note": "Mirrors ModelRegistry.builtIn. Re-check model IDs against the live Workers AI catalogue before release."
+  "note": "Mirrors ModelRegistry.builtIn. Checked against Cloudflare's catalogue and deprecation changelog on 2026-11-01. scripts/check-models.sh verifies them live against an account when CF_ACCOUNT_ID and CF_API_TOKEN are set."
 }

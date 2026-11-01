@@ -139,6 +139,13 @@ final class FakeClient: AIInferenceClient, @unchecked Sendable {
         let data = Data(#"{"result":{"response":"hi"},"success":true,"errors":[]}"#.utf8)
         #expect(try CloudflareAIClient.decodeResponse(data) == "hi")
         #expect(throws: AIError.self) { try CloudflareAIClient.decodeResponse(Data("{}".utf8)) }
+        let wrapped = Data(#"{"result":{"id":"x","choices":[{"message":{"role":"assistant","content":"glm"}}]},"success":true}"#.utf8)
+        #expect(try CloudflareAIClient.decodeResponse(wrapped) == "glm")
+        let bare = Data(#"{"choices":[{"message":{"content":"bare"}}]}"#.utf8)
+        #expect(try CloudflareAIClient.decodeResponse(bare) == "bare")
+        let catalogue = Data(#"{"result":[{"name":"@cf/zai-org/glm-4.7-flash"},{"name":"@cf/zai-org/glm-4.7"}],"success":true}"#.utf8)
+        #expect(CloudflareAIClient.catalogue(catalogue, contains: "@cf/zai-org/glm-4.7-flash"))
+        #expect(!CloudflareAIClient.catalogue(catalogue, contains: "@cf/meta/llama-3.1-8b-instruct"))
     }
 
     @Test func pageCannotCloseUntrustedBlock() {
@@ -152,6 +159,8 @@ final class FakeClient: AIInferenceClient, @unchecked Sendable {
 
     @Test func registryFallsBackToDefault() {
         #expect(ModelRegistry.builtIn.model("missing").id == ModelRegistry.builtIn.defaultModelID)
+        #expect(ModelRegistry.builtIn.model("@cf/meta/llama-3.1-8b-instruct").id == ModelRegistry.builtIn.defaultModelID)
+        #expect(!ModelRegistry.builtIn.models.contains { ModelRegistry.retiredModelIDs.contains($0.id) })
     }
 
     @Test func redactsCredentials() {

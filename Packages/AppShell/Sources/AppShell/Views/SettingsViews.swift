@@ -174,6 +174,12 @@ struct AIAccountView: View {
         case .invalid: "Cloudflare didn't accept this token, or Kage couldn't reach it."
         case .notConfigured: "No account saved."
         }
+        guard env.aiStatus == .active else { return }
+        let ids = ModelRegistry.builtIn.models.map(\.id)
+        if let missing = try? await CloudflareAIClient(credentials: env.credentials).unavailableModels(ids), !missing.isEmpty {
+            let names = ModelRegistry.builtIn.models.filter { missing.contains($0.id) }.map(\.name).joined(separator: ", ")
+            status = (status ?? "") + " Not offered on this account: \(names)."
+        }
     }
 
     private func remove() async {
