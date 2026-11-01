@@ -69,8 +69,9 @@ struct ContextPanel: View {
     private var notConfigured: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Context AI is optional").font(.title3.weight(.semibold))
+            // Primary colour: .secondary on the panel background fell just short of 4.5:1 in the K-30 audit.
             Text("Connect your own Cloudflare account to summarise and ask about pages. Nothing is sent until you ask, and browsing works without it.")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.primary)
             Button("Set up Cloudflare Workers AI") { showAISetup = true }
                 .sheet(isPresented: $showAISetup) { NavigationStack { AIAccountView() }.environment(env) }
             researchList
