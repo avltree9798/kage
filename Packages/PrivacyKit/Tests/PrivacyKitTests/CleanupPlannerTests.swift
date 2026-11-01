@@ -16,6 +16,7 @@ import KageModels
         let plan = CleanupPlanner.plan(.init(scope: .routine, now: now, protectedSites: [bank], websiteData: data))
         #expect(plan.steps == [
             .deleteExpiredHistory(asOf: now),
+            .deleteExpiredAISessions(asOf: now),
             .removeWebsiteData(displayName: "bank.test", kinds: [.cache]),
             .removeWebsiteData(displayName: "news.test", kinds: [.cookies, .localStorage]),
         ])
@@ -28,6 +29,7 @@ import KageModels
         #expect(plan.steps.first == .deleteAllHistory)
         #expect(plan.steps.contains(.removeWebsiteData(displayName: "bank.test", kinds: [.cookies, .cache, .indexedDB])))
         #expect(plan.preserved.isEmpty)
+        #expect(plan.steps.last == .removeAllWebsiteDataStores)
     }
 
     @Test func reportIsIncompleteWhenAnyStepFails() {

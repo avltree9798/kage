@@ -9,6 +9,7 @@ let package = Package(
         .package(path: "../KageModels"),
         .package(path: "../Persistence"),
         .package(path: "../SecurityKit"),
+        .package(path: "../PrivacyKit"),
     ],
     targets: [
         .target(
@@ -17,8 +18,13 @@ let package = Package(
                 .product(name: "KageModels", package: "KageModels"),
                 .product(name: "Persistence", package: "Persistence"),
                 .product(name: "SecurityKit", package: "SecurityKit"),
+                .product(name: "PrivacyKit", package: "PrivacyKit"),
             ]
         ),
-        .testTarget(name: "ContextAITests", dependencies: ["ContextAI"]),
+        .testTarget(
+            name: "ContextAITests",
+            dependencies: ["ContextAI", .product(name: "KageModels", package: "KageModels"),
+                           .product(name: "SecurityKit", package: "SecurityKit"), .product(name: "PrivacyKit", package: "PrivacyKit")]
+        ),
     ]
 )
