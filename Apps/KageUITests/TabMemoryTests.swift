@@ -14,7 +14,15 @@ final class TabMemoryTests: XCTestCase {
         options.iterationCount = 1
         measure(metrics: [XCTMemoryMetric(application: app)], options: options) {
             app.launch()
-            XCTAssertTrue(app.textFields["omnibox"].waitForExistence(timeout: 30))
+            let up = app.textFields["omnibox"].waitForExistence(timeout: 60)
+            if !up {
+                let shot = XCTAttachment(screenshot: app.screenshot())
+                shot.lifetime = .keepAlways
+                add(shot)
+                print("KAGE-DIAG state=\(app.state.rawValue)")
+                print("KAGE-DIAG tree=\(String(app.debugDescription.prefix(4000)))")
+            }
+            XCTAssertTrue(up)
             // Give WebKit time to load the active tab and settle residency for the rest.
             let settled = expectation(description: "settle")
             DispatchQueue.main.asyncAfter(deadline: .now() + 20) { settled.fulfill() }

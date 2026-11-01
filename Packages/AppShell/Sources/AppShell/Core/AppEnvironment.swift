@@ -115,7 +115,7 @@ public final class AppEnvironment {
                 var c = URLComponents(url: url, resolvingAgainstBaseURL: false)
                 let items = c?.queryItems ?? []
                 c?.queryItems = items + [URLQueryItem(name: "kage-tab", value: String(i))]
-                currentStore.open(c?.url ?? url)
+                currentStore.open(c?.url ?? url, background: true)
             }
         }
         await runCleanup(.launch)

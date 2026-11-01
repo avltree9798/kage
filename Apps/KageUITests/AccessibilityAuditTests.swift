@@ -16,7 +16,8 @@ final class AccessibilityAuditTests: XCTestCase {
     /// UI-testing mode opens a blank page, so the audit sees only Kage's own chrome, not a site's markup.
     private func audit() throws {
         try app.performAccessibilityAudit { issue in
-            issue.element?.elementType == .webView  // the (empty) web view container itself
+            print("KAGE-AUDIT \(issue.auditType) \(issue.compactDescription) element=\(issue.element.map { "\($0.elementType.rawValue) id=\($0.identifier) label=\($0.label) frame=\($0.frame)" } ?? "nil")")
+            return issue.element?.elementType == .webView  // the (empty) web view container itself
         }
     }
 

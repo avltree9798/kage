@@ -19,6 +19,8 @@ struct WebViewHost: UIViewRepresentable {
         container.subviews.forEach { $0.removeFromSuperview() }
         guard let webView else { return }
         webView.translatesAutoresizingMaskIntoConstraints = false
+        // The web view's own accessibility group needs a name (K-30 audit: "Element has no description").
+        webView.accessibilityLabel = "Web page"
         container.addSubview(webView)
         NSLayoutConstraint.activate([
             webView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
@@ -32,13 +34,20 @@ struct WebViewHost: UIViewRepresentable {
 struct WebViewHost: NSViewRepresentable {
     let webView: WKWebView?
 
-    func makeNSView(context: Context) -> NSView { NSView() }
+    func makeNSView(context: Context) -> NSView {
+        let v = NSView()
+        v.setAccessibilityElement(true)
+        v.setAccessibilityRole(.group)
+        v.setAccessibilityLabel("Web page")
+        return v
+    }
 
     func updateNSView(_ container: NSView, context: Context) {
         if let current = container.subviews.first as? WKWebView, current === webView { return }
         container.subviews.forEach { $0.removeFromSuperview() }
         guard let webView else { return }
         webView.translatesAutoresizingMaskIntoConstraints = false
+        webView.setAccessibilityLabel("Web page")
         container.addSubview(webView)
         NSLayoutConstraint.activate([
             webView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
