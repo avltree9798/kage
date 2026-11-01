@@ -12,11 +12,10 @@ final class TestVaultKey: @unchecked Sendable {
     let key: SymmetricKey
     init(_ key: SymmetricKey = SymmetricKey(size: .bits256)) { self.key = key }
     struct Locked: Error {}
-    func setUnlocked(_ v: Bool) { lock.lock(); unlocked = v; lock.unlock() }
+    func setUnlocked(_ v: Bool) { lock.withLock { unlocked = v } }
     var source: VaultKeySource {
         { [self] in
-            lock.lock(); defer { lock.unlock() }
-            guard unlocked else { throw Locked() }
+            guard lock.withLock({ unlocked }) else { throw Locked() }
             return key
         }
     }
