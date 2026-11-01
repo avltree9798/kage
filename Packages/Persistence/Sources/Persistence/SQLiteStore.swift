@@ -56,8 +56,16 @@ nonisolated(unsafe) private let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3
 
 /// Serialised access to one SQLite connection (spec 13.3: services use actors for mutable state).
 /// Kage-owned data only; WebKit website data is never stored here (ADR-002).
+/// Owns the raw connection handle and closes it when the store goes away.
+private final class ConnectionHandle: @unchecked Sendable {
+    let pointer: OpaquePointer
+    init(_ pointer: OpaquePointer) { self.pointer = pointer }
+    deinit { sqlite3_close(pointer) }
+}
+
 public actor SQLiteStore {
-    private var db: OpaquePointer?
+    private let connection: ConnectionHandle
+    private var db: OpaquePointer? { connection.pointer }
     public let path: String
 
     /// `path` of ":memory:" opens a private in-memory database, used by tests and the Private profile.
@@ -71,7 +79,7 @@ public actor SQLiteStore {
             sqlite3_close(handle)
             throw SQLiteError(code: rc, message: msg)
         }
-        db = handle
+        connection = ConnectionHandle(handle)
         try Self.exec(handle, "PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA secure_delete=ON;")
         try Self.migrate(handle, migrations)
     }
@@ -87,8 +95,6 @@ public actor SQLiteStore {
         try? dir.setResourceValues(values)
         return try SQLiteStore(path: dir.appendingPathComponent(name).path)
     }
-
-    deinit { sqlite3_close(db) }
 
     public var schemaVersion: Int {
         get throws { try query("PRAGMA user_version").first?.int("user_version") ?? 0 }
