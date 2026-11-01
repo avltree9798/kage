@@ -109,6 +109,8 @@ struct SettingsView: View {
             Section("About and Diagnostics") {
                 LabeledContent("Version", value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0")
                 Text("Kage collects no analytics, visited URLs or AI prompts.").font(.footnote)
+                Text("Tracker blocking uses EasyPrivacy by the EasyList authors (easylist.to), under CC BY-SA 3.0\(TrackerList.bundled.version.map { ", version \($0)" } ?? ""). The tunnel uses WireGuard (MIT).")
+                    .font(.footnote).foregroundStyle(.secondary)
             }
         }
         .navigationTitle("Settings")

@@ -13,7 +13,8 @@ let package = Package(
             name: "SecurityKit",
             dependencies: [
                 .product(name: "KageModels", package: "KageModels"),
-            ]
+            ],
+            resources: [.copy("Resources/easyprivacy-hosts.txt")]
         ),
         .testTarget(name: "SecurityKitTests", dependencies: ["SecurityKit"]),
     ]

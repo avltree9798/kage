@@ -63,8 +63,7 @@ public enum ContentRuleBuilder {
         return chunks
     }
 
-    /// Seed list of widely documented third-party tracking hosts. Replace with an approved,
-    /// licence-compatible ruleset and signed updates (spec 24 Q9, ticket K-21).
+    /// Small fallback used only if the bundled EasyPrivacy list can't be read.
     public static let seedTrackers: [String] = [
         "doubleclick.net", "google-analytics.com", "googletagmanager.com", "googlesyndication.com",
         "googleadservices.com", "connect.facebook.net", "scorecardresearch.com", "adnxs.com", "criteo.com",
@@ -73,6 +72,47 @@ public enum ContentRuleBuilder {
         "casalemedia.com", "bluekai.com", "demdex.net", "krxd.net", "chartbeat.com", "newrelic.com",
         "bat.bing.com", "ads.linkedin.com", "analytics.tiktok.com", "ads-twitter.com",
     ]
+}
+
+/// The bundled tracker hosts (ticket K-21): EasyPrivacy's whole-host rules, converted by
+/// `scripts/build-tracker-rules.py`. EasyPrivacy is CC BY-SA 3.0; attribution is in the file header,
+/// Config/ContentRules/README.md and Settings > About. Updates ship with app releases.
+public struct TrackerList: Sendable {
+    public let hosts: [String]
+    public let version: String?
+
+    public static var bundledURL: URL? { Bundle.module.url(forResource: "easyprivacy-hosts", withExtension: "txt") }
+
+    public static let bundled: TrackerList = {
+        guard let url = bundledURL,
+              let text = try? String(contentsOf: url, encoding: .utf8) else {
+            return TrackerList(hosts: ContentRuleBuilder.seedTrackers, version: nil)
+        }
+        let parsed = parse(text)
+        return parsed.hosts.isEmpty ? TrackerList(hosts: ContentRuleBuilder.seedTrackers, version: nil) : parsed
+    }()
+
+    public static func parse(_ text: String) -> TrackerList {
+        var hosts: [String] = []
+        var version: String?
+        for line in text.split(whereSeparator: \.isNewline) {
+            if line.hasPrefix("!") {
+                if let r = line.range(of: "EasyPrivacy version: ") {
+                    version = line[r.upperBound...].split(separator: ";").first.map(String.init)
+                }
+                continue
+            }
+            let host = line.trimmingCharacters(in: .whitespaces).lowercased()
+            if isValidHost(host) { hosts.append(host) }
+        }
+        return TrackerList(hosts: hosts, version: version)
+    }
+
+    /// Hosts reach WebKit's regex engine, so only plain DNS names are accepted.
+    public static func isValidHost(_ host: String) -> Bool {
+        guard host.count <= 253, host.contains("."), !host.hasPrefix("."), !host.hasSuffix("."), !host.contains("..") else { return false }
+        return host.unicodeScalars.allSatisfy { ("a"..."z").contains($0) || ("0"..."9").contains($0) || $0 == "." || $0 == "-" }
+    }
 }
 
 #if canImport(WebKit)
@@ -85,7 +125,7 @@ import WebKit
     public private(set) var compiled: [WKContentRuleList] = []
     private let trackers: [String]
 
-    public init(mode: BlockingMode = .standard, exceptions: Set<String> = [], trackers: [String] = ContentRuleBuilder.seedTrackers) {
+    public init(mode: BlockingMode = .standard, exceptions: Set<String> = [], trackers: [String] = TrackerList.bundled.hosts) {
         self.mode = mode; self.exceptions = exceptions; self.trackers = trackers
     }
 

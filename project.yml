@@ -19,8 +19,7 @@ packages:
   NetworkTunnel:
     path: Packages/NetworkTunnel
   WireGuardKit:
-    url: https://github.com/WireGuard/wireguard-apple
-    branch: master
+    path: Vendor/WireGuardKit
 targets:
   KageiOS:
     type: application
@@ -135,7 +134,7 @@ targets:
       toolPath: /usr/bin/make
       arguments: $(ACTION)
       passSettings: true
-      workingDirectory: ${BUILD_DIR%Build/*}SourcePackages/checkouts/wireguard-apple/Sources/WireGuardKitGo
+      workingDirectory: $(PROJECT_DIR)/Vendor/WireGuardKit/Sources/WireGuardKitGo
     settings:
       base:
         SDKROOT: iphoneos
@@ -146,7 +145,7 @@ targets:
       toolPath: /usr/bin/make
       arguments: $(ACTION)
       passSettings: true
-      workingDirectory: ${BUILD_DIR%Build/*}SourcePackages/checkouts/wireguard-apple/Sources/WireGuardKitGo
+      workingDirectory: $(PROJECT_DIR)/Vendor/WireGuardKit/Sources/WireGuardKitGo
     settings:
       base:
         SDKROOT: macosx

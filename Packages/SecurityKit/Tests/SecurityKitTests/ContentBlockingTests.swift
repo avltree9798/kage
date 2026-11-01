@@ -62,3 +62,45 @@ import Testing
         #expect(try await store.load() == nil)
     }
 }
+
+// K-21: the bundled EasyPrivacy list is real, attributed, and compiles in WebKit.
+@Suite struct TrackerListTests {
+    @Test func bundledListIsLoadedAndAttributed() throws {
+        let list = TrackerList.bundled
+        #expect(list.hosts.count > 1000)
+        #expect(list.version != nil)
+        #expect(list.hosts.allSatisfy(TrackerList.isValidHost))
+        #expect(Set(list.hosts).count == list.hosts.count)
+        let url = try #require(TrackerList.bundledURL)
+        let header = try String(contentsOf: url, encoding: .utf8).prefix(600)
+        #expect(header.contains("Creative Commons Attribution-ShareAlike 3.0"))
+        #expect(header.contains("easylist.to"))
+    }
+
+    @Test func parserRejectsUnsafeHosts() {
+        let list = TrackerList.parse("! EasyPrivacy version: 1; x\nok.example\nbad host.example\n.lead.example\nno-dot\n(re|gex).example\n")
+        #expect(list.hosts == ["ok.example"])
+        #expect(list.version == "1")
+    }
+}
+
+#if canImport(WebKit)
+import WebKit
+
+@MainActor @Suite struct WebKitCompileTests {
+    /// Compiles the full bundled ruleset with WebKit's real compiler in every blocking mode.
+    @Test(arguments: [BlockingMode.standard, .strict])
+    func fullRulesetCompiles(mode: BlockingMode) async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("kage-rules-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = try #require(WKContentRuleListStore(url: dir))
+        let chunks = try ContentRuleBuilder.encode(
+            ContentRuleBuilder.rules(mode: mode, trackers: TrackerList.bundled.hosts, exceptions: ["bank.example"]))
+        for (i, chunk) in chunks.enumerated() {
+            let list = try await store.compileContentRuleList(forIdentifier: "test-\(mode.rawValue)-\(i)", encodedContentRuleList: chunk)
+            #expect(list != nil)
+        }
+    }
+}
+#endif
