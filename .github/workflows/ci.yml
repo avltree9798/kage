@@ -124,6 +124,10 @@ jobs:
       - name: Summarise results
         if: always()
         run: |
+          for f in ~/Library/Logs/DiagnosticReports/Kage*.ips; do
+            [ -f "$f" ] || continue
+            echo "::group::crash $f"; head -c 12000 "$f"; echo; echo "::endgroup::"
+          done
           xcrun xcresulttool get test-results summary --path UITests.xcresult || true
           xcrun xcresulttool get test-results tests --path UITests.xcresult | head -200 || true
           xcrun xcresulttool get test-results metrics --path UITests.xcresult | head -100 || true

@@ -20,7 +20,8 @@ final class TabMemoryTests: XCTestCase {
                 shot.lifetime = .keepAlways
                 add(shot)
                 print("KAGE-DIAG state=\(app.state.rawValue)")
-                print("KAGE-DIAG tree=\(String(app.debugDescription.prefix(4000)))")
+                print("KAGE-DIAG windows=\(app.windows.count) sheets=\(app.sheets.count) dialogs=\(app.dialogs.count)")
+                print("KAGE-DIAG window=\(String(app.windows.firstMatch.debugDescription.prefix(6000)))")
             }
             XCTAssertTrue(up)
             // Give WebKit time to load the active tab and settle residency for the rest.

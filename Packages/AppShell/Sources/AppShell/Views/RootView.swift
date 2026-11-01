@@ -72,6 +72,9 @@ public struct RootView: View {
         }
         .task { await env.start() }
         .simultaneousGesture(TapGesture().onEnded { env.lock.noteActivity() })
+        // The activity-tracking gesture makes the root an interactive group; name it so assistive tech can (K-30).
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Kage")
     }
 
     @ViewBuilder
