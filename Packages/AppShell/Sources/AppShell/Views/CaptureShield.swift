@@ -71,12 +71,12 @@ struct WindowSharingSetter: NSViewRepresentable {
     let hidden: Bool
     func makeNSView(context: Context) -> NSView { SharingProbe() }
     func updateNSView(_ view: NSView, context: Context) {
-        (view as? SharingProbe)?.hidden = hidden
+        (view as? SharingProbe)?.hideFromCapture = hidden
     }
     final class SharingProbe: NSView {
-        var hidden = false { didSet { apply() } }
+        var hideFromCapture = false { didSet { apply() } }
         override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); apply() }
-        func apply() { window?.sharingType = hidden ? .none : .readOnly }
+        func apply() { window?.sharingType = hideFromCapture ? .none : .readOnly }
     }
 }
 #endif
