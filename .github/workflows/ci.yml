@@ -121,19 +121,6 @@ jobs:
           xcodebuild test -project Kage.xcodeproj -scheme KageMac -destination 'platform=macOS' \
             CODE_SIGN_IDENTITY=- CODE_SIGN_ENTITLEMENTS= CODE_SIGNING_REQUIRED=NO \
             -resultBundlePath UITests.xcresult
-      - name: Sample the app with 100 tabs (hang diagnosis)
-        if: always()
-        run: |
-          app=$(find ~/Library/Developer/Xcode/DerivedData -path "*Build/Products/Debug/KageMac.app" -maxdepth 6 | head -1)
-          echo "app=$app"
-          [ -n "$app" ] || exit 0
-          "$app/Contents/MacOS/KageMac" -KageUITesting -KageUITestTabs 100 > /tmp/kage-run.log 2>&1 &
-          pid=$!
-          sleep 25
-          sample $pid 5 -file /tmp/kage-sample.txt || true
-          head -c 20000 /tmp/kage-sample.txt || true
-          echo "--- app log"; tail -c 4000 /tmp/kage-run.log || true
-          kill $pid || true
       - name: Summarise results
         if: always()
         run: |

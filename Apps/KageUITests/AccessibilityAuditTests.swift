@@ -18,6 +18,10 @@ final class AccessibilityAuditTests: XCTestCase {
         try app.performAccessibilityAudit { issue in
             print("KAGE-AUDIT \(issue.auditType) \(issue.compactDescription) element=\(issue.element.map { "\($0.elementType.rawValue) id=\($0.identifier) label=\($0.label) frame=\($0.frame)" } ?? "nil")")
             if let e = issue.element { print("KAGE-AUDIT-TREE \(String(e.debugDescription.prefix(3000)))") }
+            // The window's own root group (SwiftUI's hosting view) has no label and none can be set from SwiftUI;
+            // Kage's content group inside it is labelled "Kage". Only that system group is excused.
+            if let e = issue.element, e.elementType == .group, e.label.isEmpty,
+               e.frame == app.windows.firstMatch.frame, e.groups["Kage"].exists { return true }
             return issue.element?.elementType == .webView  // the (empty) web view container itself
         }
     }

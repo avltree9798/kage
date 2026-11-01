@@ -60,12 +60,23 @@ public struct KageScene: Scene {
                 Button("New Private Tab") { Task { await env.openNewPrivateWindow() } }.keyboardShortcut("n", modifiers: [.command, .shift])
                 Button("Reopen Closed Tab") { env.currentStore.reopenLastClosed() }.keyboardShortcut("t", modifiers: [.command, .shift])
                 Button("Close Tab") { if let id = env.currentStore.activeTabID { env.currentStore.close(id) } }.keyboardShortcut("w")
+                Divider()
+                Button("Show Next Tab") { switchTab(by: 1) }.keyboardShortcut("]", modifiers: [.command, .shift])
+                Button("Show Previous Tab") { switchTab(by: -1) }.keyboardShortcut("[", modifiers: [.command, .shift])
             }
             CommandMenu("Privacy") {
                 Button("Lock Kage") { env.lock.lock(trigger: .manual) }.keyboardShortcut("l", modifiers: [.command, .shift])
                 Button("Run Cleanup Now") { Task { await env.runCleanup(.manual) } }
             }
         }
+    }
+
+    private func switchTab(by step: Int) {
+        let store = env.currentStore
+        guard !store.tabs.isEmpty else { return }
+        let i = store.tabs.firstIndex { $0.id == store.activeTabID } ?? 0
+        let next = store.tabs[(i + step + store.tabs.count) % store.tabs.count].id
+        Task { await store.activate(next) }
     }
 
     /// Handoff only for ordinary web pages in Standard; never Private, Ghost or Vault (spec 12).
