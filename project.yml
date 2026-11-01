@@ -1,0 +1,31 @@
+# XcodeGen spec for the app targets. Run `xcodegen generate` to create Kage.xcodeproj.
+name: Kage
+options:
+  bundleIdPrefix: dev.kage
+  deploymentTarget:
+    iOS: "27.2"
+    macOS: "27.0"
+packages:
+  AppShell:
+    path: Packages/AppShell
+targets:
+  KageiOS:
+    type: application
+    platform: iOS
+    sources: [Apps/KageiOS/Sources]
+    dependencies:
+      - package: AppShell
+    info:
+      path: Apps/KageiOS/Info.plist
+      properties:
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: true
+  KageMac:
+    type: application
+    platform: macOS
+    sources: [Apps/KageMac/Sources]
+    dependencies:
+      - package: AppShell
+    info:
+      path: Apps/KageMac/Info.plist
