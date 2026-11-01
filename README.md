@@ -24,3 +24,6 @@ brew install xcodegen && xcodegen generate && open Kage.xcodeproj
 ```
 
 Requires Xcode with the iOS 27.2 and macOS 27 SDKs.
+
+`Kage.xcodeproj` needs a paid Apple Developer team (Network Extensions, iCloud). With a free Personal Team, use the
+local project instead: see [Docs/LocalDevelopment.md](Docs/LocalDevelopment.md).
