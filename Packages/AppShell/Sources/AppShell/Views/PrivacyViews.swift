@@ -259,16 +259,3 @@ struct NetworkProtectionView: View {
     }
 }
 #endif
-                }
-                Button(checking ? "Checking…" : "Ask Cloudflare what it sees") {
-                    checking = true
-                    Task { await network.checkTrace(); checking = false }
-                }
-                .disabled(checking)
-                if let note = network.traceNote { Text(note).font(.footnote) }
-            }
-        }
-        .navigationTitle("Network Protection")
-    }
-}
-#endif
