@@ -47,7 +47,8 @@ actor FakeWebKit: WebsiteDataStoreAdapting {
     // AT05
     @Test func forgetEverythingNeedsConfirmation() async throws {
         let web = FakeWebKit(["bank.test": [.cookies]])
-        let svc = ForgetNowService(cleaner: .init(history: InMemoryHistoryRepository(), webKit: web),
+        let db = try KageDatabase.inMemory()
+        let svc = ForgetNowService(cleaner: .init(history: db.history, aiSessions: db.aiSessions, webKit: web),
                                    protectedSites: { [bank] }, closeEphemeralTabs: { 2 })
         await #expect(throws: ForgetNowService.ForgetError.self) { try await svc.perform(.everything) }
         let result = try await svc.perform(.everything, confirmed: true)
