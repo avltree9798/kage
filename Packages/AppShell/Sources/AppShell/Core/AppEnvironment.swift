@@ -11,6 +11,8 @@ import ContextAI
 import PlatformAdapters
 import NetworkTunnel
 
+public enum AppDestination: String, Identifiable, Sendable { case library, privacy, settings; public var id: String { rawValue } }
+
 /// Composition root: builds every service once and wires them together.
 @MainActor @Observable
 public final class AppEnvironment {
@@ -38,6 +40,10 @@ public final class AppEnvironment {
     public private(set) var lastCleanup: CleanupLogEntry?
     public private(set) var aiStatus: TokenStatus = .notConfigured
     public var isContextVisible = true
+    /// The tab sidebar as a column beside the page (wide windows). iPhone shows it full screen instead.
+    public var isSidebarVisible = true
+    /// Library, Privacy or Settings, opened from the sidebar toolbar or the page menu.
+    public var destination: AppDestination?
     /// Mirrors the Vault key gate for the UI. The real gate is `vaultKey`: without the key nothing in the
     /// Vault store can be read, whatever this flag says (threat model T-10).
     public private(set) var vaultUnlocked = false
