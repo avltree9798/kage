@@ -73,7 +73,7 @@ struct ContextPanel: View {
             Text("Connect your own Cloudflare account to summarise and ask about pages. Nothing is sent until you ask, and browsing works without it.")
                 .foregroundStyle(.primary)
             Button("Set up Cloudflare Workers AI") { showAISetup = true }
-                .sheet(isPresented: $showAISetup) { NavigationStack { AIAccountView() }.environment(env) }
+                .sheet(isPresented: $showAISetup) { NavigationStack { AIAccountView() }.environment(env).formStyle(.grouped) }
             researchList
             Spacer()
         }

@@ -50,8 +50,9 @@ public struct RootView: View {
                 }
             }
             .environment(env)
+            .formStyle(.grouped)
             #if os(macOS)
-            .frame(minWidth: 560, minHeight: 520)
+            .frame(minWidth: 620, idealWidth: 680, minHeight: 600, idealHeight: 720)
             #endif
         }
         .sheet(isPresented: Binding(get: { !env.settings.onboardingComplete }, set: { _ in })) {

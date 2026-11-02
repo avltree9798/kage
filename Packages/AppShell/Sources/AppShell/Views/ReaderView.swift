@@ -147,6 +147,7 @@ struct SiteInfoView: View {
                     }))
                 }
             }
+            .formStyle(.grouped)
             .navigationTitle(host)
             .kageInlineTitle()
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }

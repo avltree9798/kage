@@ -15,27 +15,31 @@ struct SettingsView: View {
         @Bindable var s = env.settings
         Form {
             Section("General") {
-                TextField("Home page", text: $s.homepage).autocorrectionDisabled()
+                TextField("Home page", text: $s.homepage, prompt: Text("Blank page"))
+                    .autocorrectionDisabled()
+                    .multilineTextAlignment(.trailing)
                 Picker("Default profile", selection: $s.defaultProfile) {
                     Text("Standard").tag(PrivacyProfile.Kind.standard)
                     Text("Ghost").tag(PrivacyProfile.Kind.ghost)
                     Text("Vault").tag(PrivacyProfile.Kind.vault)
                 }
             }
-            Section("Search") {
+            Section {
                 Picker("Search engine", selection: $s.searchEngineID) {
                     ForEach(SearchEngine.all) { Text($0.name).tag($0.id) }
                 }
                 Toggle("Search suggestions", isOn: $s.searchSuggestions)
+            } header: { Text("Search") } footer: {
                 if s.searchSuggestions {
                     Text("What you type in the address bar is sent to \(s.searchEngine.name) to get suggestions. Never in Private.")
-                        .font(.footnote).foregroundStyle(.secondary)
                 }
             }
-            Section("Tabs") {
-                Stepper("Live pages kept in memory: \(env.currentStore.maxResidentWebViews)",
-                        value: Binding(get: { env.currentStore.maxResidentWebViews }, set: { env.currentStore.maxResidentWebViews = $0 }), in: 2...12)
-                Text("Other tabs are suspended and reload when you open them. Unsaved form entries may be lost.").font(.footnote).foregroundStyle(.secondary)
+            Section {
+                Stepper(value: Binding(get: { env.currentStore.maxResidentWebViews }, set: { env.currentStore.maxResidentWebViews = $0 }), in: 2...12) {
+                    LabeledContent("Live pages in memory", value: "\(env.currentStore.maxResidentWebViews)")
+                }
+            } header: { Text("Tabs") } footer: {
+                Text("Other tabs are suspended and reload when you open them. Unsaved form entries may be lost.")
             }
             Section("Appearance") {
                 Picker("Accent colour", selection: $s.accentColourName) {
@@ -74,46 +78,46 @@ struct SettingsView: View {
                     }
                 }
             }
-            Section("AI and Models") {
+            Section {
                 NavigationLink("Cloudflare account") { AIAccountView() }
                 Picker("Model", selection: Binding(get: { env.context.modelID }, set: { env.context.modelID = $0; s.aiModelID = $0 })) {
                     ForEach(env.context.registry.models) { Text($0.name).tag($0.id) }
                 }
                 Toggle("Smart Pre-Summary", isOn: $s.smartPreSummary)
                     .onChange(of: s.smartPreSummary) { _, _ in Task { await env.applyRetentionOverride() } }
+            } header: { Text("AI and Models") } footer: {
                 Text("When on, Kage summarises pages after they load. Banking, sign-in and health sites and Private tabs are always skipped.")
-                    .font(.footnote).foregroundStyle(.secondary)
             }
             Section("Passwords and Passkeys") {
                 Text("Kage uses your system passwords and passkeys through AutoFill. Kage never stores your passwords.")
-                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
             Section("Downloads") {
                 LabeledContent("Save to", value: env.downloads.directory.lastPathComponent)
             }
-            Section("Sync") {
+            Section {
                 Toggle("iCloud sync for bookmarks and reading list", isOn: $s.iCloudSync)
                     .disabled(!env.syncAvailable)
                     .onChange(of: s.iCloudSync) { _, on in if on { Task { await env.syncBookmarks() } } }
-                if !env.syncAvailable {
-                    Text("iCloud sync isn't set up in this build.").font(.footnote).foregroundStyle(.secondary)
-                } else if let status = env.syncStatus {
-                    Text(status).font(.footnote)
+                if let status = env.syncStatus, env.syncAvailable {
+                    Text(status).foregroundStyle(.secondary)
                 }
-                Text("Private sessions, history and AI chats are never synced. Turning sync off leaves everything on this device.")
-                    .font(.footnote).foregroundStyle(.secondary)
+            } header: { Text("Sync") } footer: {
+                Text((env.syncAvailable ? "" : "iCloud sync isn't set up in this build. ")
+                     + "Private sessions, history and AI chats are never synced. Turning sync off leaves everything on this device.")
             }
             Section("Network Protection") { NavigationLink(env.network.state.title) { NetworkProtectionView() } }
             Section("Accessibility") {
-                Text("Kage follows your system text size, Reduce Motion and contrast settings.").font(.footnote)
+                Text("Kage follows your system text size, Reduce Motion and contrast settings.").foregroundStyle(.secondary)
             }
-            Section("About and Diagnostics") {
+            Section {
                 LabeledContent("Version", value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0")
-                Text("Kage collects no analytics, visited URLs or AI prompts.").font(.footnote)
+                Text("Kage collects no analytics, visited URLs or AI prompts.").foregroundStyle(.secondary)
+            } header: { Text("About and Diagnostics") } footer: {
                 Text("Tracker blocking uses EasyPrivacy by the EasyList authors (easylist.to), under CC BY-SA 3.0\(TrackerList.bundled.version.map { ", version \($0)" } ?? ""). The tunnel uses WireGuard (MIT).")
-                    .font(.footnote).foregroundStyle(.secondary)
             }
         }
+        .formStyle(.grouped)
         .navigationTitle("Settings")
         .kageInlineTitle()
         .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }

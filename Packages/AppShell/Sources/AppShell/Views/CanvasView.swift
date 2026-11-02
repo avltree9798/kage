@@ -97,14 +97,17 @@ struct CanvasView: View {
                 OmniboxField()
             } else {
                 siteIdentity
-                Text(tab?.host ?? "").font(.callout).foregroundStyle(.secondary).lineLimit(1)
-                Spacer()
+                Text(tab?.title.isEmpty == false ? tab!.title : (tab?.host ?? ""))
+                    .font(.callout.weight(.medium)).lineLimit(1).truncationMode(.tail)
+                Spacer(minLength: 8)
             }
             pageMenu
             if showsContextButton { contextButton }
         }
+        .font(.system(size: 15, weight: .medium))
+        .imageScale(.large)
         .buttonStyle(.borderless)
-        .padding(.horizontal, 10).padding(.vertical, 6)
+        .padding(.horizontal, 12).padding(.vertical, 8)
         .background(KageTokens.chromeBackground)
         .zIndex(1)
     }
@@ -251,7 +254,7 @@ struct OmniboxField: View {
                 }
                 .onChange(of: focused) { _, f in
                     editing = f
-                    if !f { text = tab?.url?.absoluteString ?? text }
+                    text = f ? (tab?.url?.absoluteString ?? "") : idleText
                 }
             if editing && !text.isEmpty {
                 Button { text = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary) }
@@ -266,10 +269,17 @@ struct OmniboxField: View {
         .overlay(alignment: .topLeading) {
             if editing && !suggestions.isEmpty { suggestionList.offset(y: 40) }
         }
-        .onAppear { text = tab?.url?.absoluteString ?? "" }
-        .onChange(of: tab?.url) { _, new in if !editing { text = new?.absoluteString ?? "" } }
-        .onChange(of: store.activeTabID) { _, _ in if !editing { text = tab?.url?.absoluteString ?? "" } }
+        .onAppear { text = idleText }
+        .onChange(of: tab?.url) { _, _ in if !editing { text = idleText } }
+        .onChange(of: store.activeTabID) { _, _ in if !editing { text = idleText } }
         .task(id: text) { await loadSuggestions() }
+    }
+
+    /// While not editing, show just the site (what matters for trust); the full address appears on focus.
+    private var idleText: String {
+        guard let url = tab?.url else { return "" }
+        if !url.kageHost.isEmpty { return url.kageHost }
+        return url.scheme == "about" ? "" : url.absoluteString
     }
 
     private var suggestionList: some View {
