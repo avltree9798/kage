@@ -11,11 +11,9 @@ public struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var contextFraction: Double = KageTokens.canvasFraction
     @State private var showContextSheet = false
-    @State private var destination: Destination?
+    @State private var showSidebarSheet = false
     /// Last hinge status from `onHingeChange` (iOS 27.1+); `nil` on devices without a fold.
     @State private var hinge: HingeStatus?
-
-    enum Destination: String, Identifiable { case library, privacy, settings; var id: String { rawValue } }
 
     public init() {}
 
@@ -43,7 +41,7 @@ public struct RootView: View {
         .overlay { if env.lock.isConcealed { LockOverlayView() } }
         .modifier(PromptHost())
         .sheet(isPresented: $showContextSheet) { ContextPanel().environment(env).presentationDetents([.medium, .large]) }
-        .sheet(item: $destination) { d in
+        .sheet(item: Binding(get: { env.destination }, set: { env.destination = $0 })) { d in
             NavigationStack {
                 switch d {
                 case .library: LibraryView()
@@ -82,46 +80,79 @@ public struct RootView: View {
 
     @ViewBuilder
     private func content(mode: LayoutMode, geometry: LayoutGeometry) -> some View {
-        VStack(spacing: 0) {
-            switch mode {
-            case .compact:
-                CanvasView()
-                compactBar
-            case .wide, .duo:
-                if env.isContextVisible, let split = LayoutResolver.split(for: geometry, fraction: contextFraction) {
-                    let gap = split.context.lowerBound - split.canvas.upperBound
-                    let canvasLength = split.canvas.upperBound - split.canvas.lowerBound
-                    if split.axis == .horizontal {
-                        HStack(spacing: 0) {
-                            CanvasView().frame(width: canvasLength)
-                            // With a fold the split snaps to it, so there's nothing to drag; the fold is left empty
-                            // so no control sits under it (spec 7.3).
-                            if gap > 0 || geometry.hingeOcclusion != nil {
-                                Color.clear.frame(width: max(gap, 0)).accessibilityHidden(true)
-                            } else {
-                                divider(total: geometry.width)
-                            }
-                            ContextPanel()
-                        }
-                    } else {
-                        CanvasView().frame(height: canvasLength)
-                        if gap > 0 { Color.clear.frame(height: gap).accessibilityHidden(true) } else { Divider() }
-                        ContextPanel()
+        switch mode {
+        case .compact:
+            CanvasView(style: .compact, onTabs: { showSidebarSheet = true }, onContext: { showContextSheet = true })
+                .modifier(SidebarCover(isPresented: $showSidebarSheet))
+        case .wide:
+            HStack(spacing: 0) {
+                if env.isSidebarVisible {
+                    SidebarView(showsAddress: true).frame(width: 280)
+                        .transition(.move(edge: .leading))
+                }
+                canvasAndContext(geometry: geometry)
+            }
+        case .duo:
+            // Page on the first screen; the second screen switches between Tabs and Context.
+            if let split = LayoutResolver.split(for: geometry, fraction: 0.5) {
+                let gap = split.context.lowerBound - split.canvas.upperBound
+                let canvasLength = split.canvas.upperBound - split.canvas.lowerBound
+                if split.axis == .horizontal {
+                    HStack(spacing: 0) {
+                        CanvasView(style: .compact, showsTabsButton: false, showsContextButton: false).frame(width: canvasLength)
+                        Color.clear.frame(width: max(gap, 0)).accessibilityHidden(true)
+                        DuoSecondaryPane()
                     }
                 } else {
-                    CanvasView()
+                    VStack(spacing: 0) {
+                        CanvasView(style: .compact, showsTabsButton: false, showsContextButton: false).frame(height: canvasLength)
+                        Color.clear.frame(height: max(gap, 0)).accessibilityHidden(true)
+                        DuoSecondaryPane()
+                    }
                 }
-                destinationBar
-            case .deskLike:
+            } else {
+                CanvasView(style: .compact, onTabs: { showSidebarSheet = true }, onContext: { showContextSheet = true })
+                    .modifier(SidebarCover(isPresented: $showSidebarSheet))
+            }
+        case .deskLike:
+            VStack(spacing: 0) {
                 if let split = LayoutResolver.split(for: geometry, fraction: 0.5) {
                     let gap = split.context.lowerBound - split.canvas.upperBound
-                    CanvasView().frame(height: split.canvas.upperBound - split.canvas.lowerBound)
+                    CanvasView(style: .compact, showsContextButton: false, onTabs: { showSidebarSheet = true })
+                        .frame(height: split.canvas.upperBound - split.canvas.lowerBound)
                     if gap > 0 { Color.clear.frame(height: gap).accessibilityHidden(true) } else { Divider() }
                     ContextPanel()
                 } else {
-                    CanvasView()
+                    CanvasView(style: .compact, onTabs: { showSidebarSheet = true }, onContext: { showContextSheet = true })
                 }
             }
+            .modifier(SidebarCover(isPresented: $showSidebarSheet))
+        }
+    }
+
+    /// The page and, when shown, the Context panel beside it (wide windows).
+    @ViewBuilder
+    private func canvasAndContext(geometry: LayoutGeometry) -> some View {
+        let canvas = CanvasView(style: .toolbar, showsOmnibox: !env.isSidebarVisible,
+                                onTabs: { withAnimation(.snappy) { env.isSidebarVisible.toggle() } })
+        if env.isContextVisible, let split = LayoutResolver.split(for: geometry, fraction: contextFraction) {
+            let canvasLength = split.canvas.upperBound - split.canvas.lowerBound
+            if split.axis == .horizontal {
+                // The sidebar takes its width from the page, so the panel keeps its share of the rest.
+                HStack(spacing: 0) {
+                    canvas.frame(minWidth: 320, idealWidth: canvasLength, maxWidth: .infinity)
+                    divider(total: geometry.width)
+                    ContextPanel().frame(minWidth: 280, maxWidth: max(280, geometry.width - canvasLength))
+                }
+            } else {
+                VStack(spacing: 0) {
+                    canvas.frame(height: canvasLength)
+                    Divider()
+                    ContextPanel()
+                }
+            }
+        } else {
+            canvas
         }
     }
 
@@ -151,31 +182,48 @@ public struct RootView: View {
                 Slider(value: $contextFraction, in: 0.35...0.8, step: 0.05) { Text("Resize Context panel") }
             }
     }
+}
 
-    private var compactBar: some View {
-        HStack {
-            Button { showContextSheet = true } label: { Label("Context", systemImage: "sparkles.rectangle.stack") }
-            Spacer()
-            destinationButtons
-        }
-        .labelStyle(.iconOnly).buttonStyle(.borderless)
-        .padding(.horizontal, 16).padding(.vertical, 8)
-        .background(KageTokens.chromeBackground)
+/// The sidebar over the whole screen (iPhone): a full-screen cover on iOS, a sheet elsewhere.
+struct SidebarCover: ViewModifier {
+    @Environment(AppEnvironment.self) private var env
+    @Binding var isPresented: Bool
+
+    func body(content: Content) -> some View {
+        #if os(iOS)
+        content.fullScreenCover(isPresented: $isPresented) { sidebar }
+        #else
+        content.sheet(isPresented: $isPresented) { sidebar.frame(minWidth: 320, minHeight: 520) }
+        #endif
     }
 
-    private var destinationBar: some View {
-        HStack { Spacer(); destinationButtons }
-            .labelStyle(.titleAndIcon).buttonStyle(.borderless).font(.footnote)
-            .padding(.horizontal, 12).padding(.vertical, 4)
-            .background(KageTokens.chromeBackground)
+    private var sidebar: some View {
+        SidebarView(onPick: { isPresented = false }, onClose: { isPresented = false }).environment(env)
     }
+}
 
-    private var destinationButtons: some View {
-        HStack(spacing: 18) {
-            Button { destination = .library } label: { Label("Library", systemImage: "books.vertical") }
-            Button { destination = .privacy } label: { Label("Privacy", systemImage: "hand.raised") }
-            Button { destination = .settings } label: { Label("Settings", systemImage: "gearshape") }
+/// iPhone Duo's second screen: the tabs sidebar or the Context panel, switched by a segmented control.
+struct DuoSecondaryPane: View {
+    @Environment(AppEnvironment.self) private var env
+    @Environment(\.colorScheme) private var colorScheme
+    enum Pane: String, CaseIterable, Identifiable { case tabs = "Tabs", context = "Context"; var id: String { rawValue } }
+    @State private var pane: Pane = .tabs
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Picker("Second screen", selection: $pane) {
+                ForEach(Pane.allCases) { Text($0.rawValue).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .padding(.horizontal, 12).padding(.vertical, 8)
+            .background(pane == .tabs ? KageTokens.sidebarGraphite : Color.clear)
+            .environment(\.colorScheme, pane == .tabs ? .dark : colorScheme)
+            switch pane {
+            case .tabs: SidebarView()
+            case .context: ContextPanel()
+            }
         }
+        .onChange(of: env.isContextVisible) { _, visible in pane = visible ? .context : .tabs }
     }
 }
 

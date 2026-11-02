@@ -10,6 +10,8 @@ public enum KageTokens {
     public static let graphite = Color(white: 0.16)
     /// The tab sidebar's surface (always dark, so profile tints read the same in light and dark mode).
     public static let sidebarGraphite = Color(red: 0.086, green: 0.094, blue: 0.114)
+    /// Fields on the sidebar (the address field on Mac and iPad), #23262D.
+    public static let sidebarField = Color(red: 0.137, green: 0.149, blue: 0.176)
 
     #if os(iOS)
     public static let chromeBackground = Color(uiColor: .secondarySystemBackground)

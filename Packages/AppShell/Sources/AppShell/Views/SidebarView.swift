@@ -12,7 +12,10 @@ struct SidebarView: View {
     @Environment(AppEnvironment.self) private var env
     /// Called after a tab is chosen, so a full-screen sidebar can close.
     var onPick: () -> Void = {}
-    var onDestination: (RootView.Destination) -> Void
+    /// Shows the address field at the top (the sidebar column on Mac and iPad).
+    var showsAddress = false
+    /// When set, a "Page" button returns to the page (the full-screen sidebar on iPhone).
+    var onClose: (() -> Void)?
     @State private var collapsedGroups: Set<UUID> = []
     @State private var showOverview = false
     @State private var showNewGroup = false
@@ -23,6 +26,21 @@ struct SidebarView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            Rectangle().fill(tint).frame(height: 3).accessibilityHidden(true)
+            if let onClose {
+                HStack {
+                    Button(action: onClose) { Label("Page", systemImage: "chevron.left") }
+                        .buttonStyle(.plain).font(.body.weight(.semibold)).foregroundStyle(tint)
+                    Spacer()
+                    Text("\(store.tabs.count) tabs").font(.footnote).foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 16).padding(.vertical, 10)
+            }
+            if showsAddress {
+                OmniboxField(showsProfileChip: false, onSidebar: true)
+                    .padding(.horizontal, 12).padding(.top, 10)
+                    .zIndex(1)
+            }
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     ProfileSwitcher()
@@ -37,7 +55,7 @@ struct SidebarView: View {
             }
             .overlay(alignment: .bottomTrailing) { toolbar.padding(12) }
         }
-        .background { KageSidebarBackground(tint: tint) }
+        .background { KageTokens.sidebarGraphite.ignoresSafeArea() }
         .environment(\.colorScheme, .dark)
         .sheet(isPresented: $showOverview) { TabOverviewView().environment(env) }
         .alert("New Folder", isPresented: $showNewGroup) {
@@ -173,9 +191,9 @@ struct SidebarView: View {
 
     private var toolbar: some View {
         HStack(spacing: 18) {
-            Button { onDestination(.library) } label: { Label("Library", systemImage: "books.vertical") }
-            Button { onDestination(.privacy) } label: { Label("Privacy", systemImage: "hand.raised") }
-            Button { onDestination(.settings) } label: { Label("Settings", systemImage: "gearshape") }
+            Button { env.destination = .library } label: { Label("Library", systemImage: "books.vertical") }
+            Button { env.destination = .privacy } label: { Label("Privacy", systemImage: "hand.raised") }
+            Button { env.destination = .settings } label: { Label("Settings", systemImage: "gearshape") }
         }
         .labelStyle(.iconOnly)
         .buttonStyle(.plain)
@@ -261,17 +279,4 @@ struct SiteMonogram: View {
     }
 }
 
-/// Graphite with a soft glow of the profile's colour rising from the bottom.
-struct KageSidebarBackground: View {
-    let tint: Color
-    var body: some View {
-        ZStack {
-            KageTokens.sidebarGraphite
-            RadialGradient(colors: [tint.opacity(0.45), .clear], center: .bottomLeading, startRadius: 10, endRadius: 520)
-            RadialGradient(colors: [tint.opacity(0.18), .clear], center: .topTrailing, startRadius: 0, endRadius: 320)
-        }
-        .ignoresSafeArea()
-        .animation(.easeInOut(duration: 0.35), value: tint)
-    }
-}
 #endif
