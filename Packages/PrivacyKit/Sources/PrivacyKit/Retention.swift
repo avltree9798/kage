@@ -64,20 +64,15 @@ public actor HistoryRetentionActor {
 #if os(iOS)
 import BackgroundTasks
 
-/// Registers an opportunistic background refresh. iOS decides if and when it runs (risk register).
+/// An opportunistic background refresh; iOS decides if and when it runs (risk register).
+/// The launch handler is registered by the app scene's `.backgroundTask(.appRefresh(identifier))`; submitting
+/// a request with no registered handler raises an exception, so the scene must register before `schedule()`.
 public enum BackgroundCleanupScheduler {
     public static let identifier = "dev.kage.cleanup"
 
-    public static func register(_ handler: @escaping @Sendable () async -> Void) {
-        BGTaskScheduler.shared.register(forTaskWithIdentifier: identifier, using: nil) { task in
-            nonisolated(unsafe) let task = task
-            let work = Task { await handler(); task.setTaskCompleted(success: true) }
-            task.expirationHandler = { work.cancel() }
-            schedule()
-        }
-    }
-
     public static func schedule(after seconds: TimeInterval = 15 * 60) {
+        // iPhone and iPad apps running on a Mac have no background refresh.
+        guard !ProcessInfo.processInfo.isiOSAppOnMac else { return }
         let req = BGAppRefreshTaskRequest(identifier: identifier)
         req.earliestBeginDate = Date(timeIntervalSinceNow: seconds)
         try? BGTaskScheduler.shared.submit(req)

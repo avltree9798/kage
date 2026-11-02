@@ -4,6 +4,7 @@ import KageModels
 import DesignSystem
 import Persistence
 import SecurityKit
+import PrivacyKit
 
 extension AppEnvironment {
     /// `-KageUITesting` (UI tests only) starts with onboarding done, a throwaway settings suite, an in-memory
@@ -73,6 +74,7 @@ public struct KageScene: Scene {
                 Button("Run Cleanup Now") { Task { await env.runCleanup(.manual) } }
             }
         }
+        .kageBackgroundCleanup(env)
     }
 
     private func switchTab(by step: Int) {
@@ -89,6 +91,21 @@ public struct KageScene: Scene {
         return scheme == "https" || scheme == "http"
     }
 }
+extension Scene {
+    /// Registers the background cleanup's launch handler at launch (iOS); without it, scheduling the
+    /// refresh raises "No launch handler registered".
+    func kageBackgroundCleanup(_ env: AppEnvironment) -> some Scene {
+        #if os(iOS)
+        backgroundTask(.appRefresh(BackgroundCleanupScheduler.identifier)) {
+            await env.runCleanup(.background)
+            BackgroundCleanupScheduler.schedule()
+        }
+        #else
+        self
+        #endif
+    }
+}
+
 #if os(iOS)
 import UIKit
 #else
