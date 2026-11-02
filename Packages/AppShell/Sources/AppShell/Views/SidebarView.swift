@@ -209,7 +209,10 @@ struct SidebarView: View {
     }
 
     private func displayTitle(_ tab: TabController) -> String {
-        tab.title.isEmpty ? (tab.url?.kageHost ?? "New Tab") : tab.title
+        // A blank page has no title and an empty host; never leave a row without a name (K-30 audit).
+        if !tab.title.isEmpty { return tab.title }
+        if let host = tab.url?.kageHost, !host.isEmpty { return host }
+        return "New Tab"
     }
 }
 
