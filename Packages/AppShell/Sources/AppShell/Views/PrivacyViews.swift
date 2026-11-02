@@ -18,19 +18,22 @@ struct PrivacyDashboardView: View {
             Section("Current profile") {
                 LabeledContent("Profile", value: env.currentProfile.name)
                 LabeledContent("History kept", value: retentionText(env.currentProfile.retention))
-                ForEach(env.currentProfile.preservationSummary, id: \.self) { Text($0).font(.footnote) }
+                ForEach(env.currentProfile.preservationSummary, id: \.self) {
+                    Label($0, systemImage: "checkmark").foregroundStyle(.secondary)
+                }
             }
-            Section("Cleanup") {
+            Section {
                 if let last = env.lastCleanup {
-                    LabeledContent("Last cleanup") { Text(last.ranAt, style: .relative) }
-                    Label(last.summary, systemImage: last.complete ? "checkmark.circle" : "exclamationmark.circle")
-                        .font(.footnote)
+                    LabeledContent("Last cleanup") { Text(last.ranAt, format: .relative(presentation: .named)) }
+                    LabeledContent("Result") {
+                        Label(last.summary, systemImage: last.complete ? "checkmark.circle" : "exclamationmark.circle")
+                    }
                 } else {
                     Text("No cleanup has run yet.").foregroundStyle(.secondary)
                 }
-                Text("Kage removes its own history exactly on schedule while it's running. Website data held by WebKit is removed by site and type, as WebKit allows; it can't be deleted item by item by age.")
-                    .font(.footnote).foregroundStyle(.secondary)
                 Button("Run Cleanup Now") { Task { await env.runCleanup(.manual) } }
+            } header: { Text("Cleanup") } footer: {
+                Text("Kage removes its own history exactly on schedule while it's running. Website data held by WebKit is removed by site and type, as WebKit allows; it can't be deleted item by item by age.")
             }
             Section("Protected sites") {
                 NavigationLink("\(env.protectedSiteList.count) protected site\(env.protectedSiteList.count == 1 ? "" : "s")") { ProtectedSitesView() }
@@ -40,10 +43,11 @@ struct PrivacyDashboardView: View {
                 LabeledContent("Automatic summaries", value: env.settings.smartPreSummary ? "On (sensitive sites excluded)" : "Off")
                 LabeledContent("Sending now", value: env.context.transmission == nil ? "Nothing" : "Yes")
             }
-            Section("Tracking protection") {
+            Section {
                 LabeledContent("Content blocking", value: env.settings.blockingMode.rawValue.capitalized)
                 LabeledContent("Site exceptions", value: "\(env.settings.blockingExceptions.count)")
-                Text("Content blocking applies to pages in Kage only. It isn't a VPN.").font(.footnote).foregroundStyle(.secondary)
+            } header: { Text("Tracking protection") } footer: {
+                Text("Content blocking applies to pages in Kage only. It isn't a VPN.")
             }
             Section("Network") {
                 NavigationLink { NetworkProtectionView() } label: {
@@ -54,6 +58,7 @@ struct PrivacyDashboardView: View {
                 NavigationLink("Forget Now…") { ForgetNowView() }.foregroundStyle(.red)
             }
         }
+        .formStyle(.grouped)
         .navigationTitle("Privacy")
         .kageInlineTitle()
         .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
