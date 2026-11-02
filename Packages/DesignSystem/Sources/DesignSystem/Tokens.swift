@@ -8,6 +8,8 @@ public enum KageTokens {
     public static let cornerRadius: CGFloat = 10
     public static let canvasFraction: CGFloat = 0.65
     public static let graphite = Color(white: 0.16)
+    /// The tab sidebar's surface (always dark, so profile tints read the same in light and dark mode).
+    public static let sidebarGraphite = Color(red: 0.086, green: 0.094, blue: 0.114)
 
     #if os(iOS)
     public static let chromeBackground = Color(uiColor: .secondarySystemBackground)
